@@ -1,0 +1,155 @@
+/* ── Global Reset & Base Styles ─────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --color-primary: #4a90d9;
+  --color-primary-light: #e3f0ff;
+  --color-bg: #f5f7fa;
+  --color-surface: #ffffff;
+  --color-text: #2c3e50;
+  --color-text-muted: #7a8fa6;
+  --color-border: #dce3eb;
+  --color-accent: #6cc6a1;
+  --color-error: #e57373;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* ── App Layout ────────────────────────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.app__logo {
+  font-size: 1.4rem;
+}
+.app__title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+.app__connection {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+.app__connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-error);
+}
+.app__connection-dot--connected {
+  background: var(--color-accent);
+}
+
+.app__body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left sidebar */
+.app__sidebar-left {
+  width: 260px;
+  padding: 16px;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Center chat */
+.app__center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+/* Right sidebar */
+.app__sidebar-right {
+  width: 260px;
+  padding: 16px;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+/* Error banner */
+.app__error {
+  padding: 8px 16px;
+  background: #fef3f3;
+  color: var(--color-error);
+  font-size: 0.85rem;
+  text-align: center;
+  border-bottom: 1px solid #f5d5d5;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .app__sidebar-left,
+  .app__sidebar-right {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .app__header {
+    padding: 10px 14px;
+  }
+  .app__title {
+    font-size: 1rem;
+  }
+}

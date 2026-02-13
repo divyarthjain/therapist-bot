@@ -1,0 +1,123 @@
+.emotion-display {
+  padding: 4px 0;
+}
+
+.emotion-display__title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4a6a8a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 12px;
+}
+
+.emotion-display__empty {
+  font-size: 0.85rem;
+  color: #a0b0c0;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Dominant emotion */
+.emotion-display__dominant {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.emotion-display__emoji {
+  font-size: 2rem;
+}
+.emotion-display__label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2c3e50;
+  text-transform: capitalize;
+  margin-bottom: 4px;
+}
+
+.emotion-display__confidence-bar {
+  width: 100px;
+  height: 4px;
+  background: #e8ecf0;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 2px;
+}
+.emotion-display__confidence-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.emotion-display__confidence-text {
+  font-size: 0.7rem;
+  color: #a0b0c0;
+}
+
+/* Incongruence */
+.emotion-display__incongruence {
+  font-size: 0.78rem;
+  color: #e57373;
+  background: #fef3f3;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+/* Modalities */
+.emotion-display__modalities {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.emotion-display__modality {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+}
+.modality-label {
+  color: #7a8fa6;
+}
+.modality-value {
+  color: #2c3e50;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+/* Score bars */
+.emotion-display__scores {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.emotion-display__score-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 32px;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+}
+.score-label {
+  color: #4a6a8a;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.score-bar {
+  height: 6px;
+  background: #e8ecf0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.score-bar__fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+.score-value {
+  color: #a0b0c0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

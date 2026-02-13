@@ -1,0 +1,55 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+backend/venv/
+venv/
+.venv/
+env/
+
+# ── Node.js ───────────────────────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ── Environment & Secrets ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+backend/server.log
+frontend/dev.log
+npm-debug.log*
+
+# ── ML Models (downloaded at runtime) ────────────────────────────────────────
+*.pt
+*.pth
+*.onnx
+*.bin
+!frontend/public/models/*.json
+!frontend/public/models/*.bin
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+*.pid

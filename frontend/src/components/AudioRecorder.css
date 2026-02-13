@@ -1,0 +1,56 @@
+.audio-recorder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #dce3eb;
+  border-radius: 50%;
+  background: #f9fbfc;
+  color: #4a6a8a;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.audio-recorder:hover:not(:disabled) {
+  background: #e3f0ff;
+  border-color: #4a90d9;
+  color: #4a90d9;
+}
+
+/* Recording state */
+.audio-recorder--recording {
+  background: #fde8e8;
+  border-color: #e57373;
+  color: #e57373;
+  animation: recordPulse 1.2s ease-in-out infinite;
+}
+@keyframes recordPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 115, 115, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(229, 115, 115, 0); }
+}
+
+/* Analyzing state */
+.audio-recorder--analyzing {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Permission denied */
+.audio-recorder--denied {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Spinner */
+.audio-recorder__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #dce3eb;
+  border-top-color: #4a90d9;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
