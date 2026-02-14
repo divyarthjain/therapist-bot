@@ -10,6 +10,7 @@ Features:
 """
 
 import logging
+import re
 from typing import AsyncGenerator, Optional
 
 from ollama import AsyncClient
@@ -55,61 +56,103 @@ Respond in the same language the user communicates in. You support Hindi, Englis
 - Keep responses concise (2-4 paragraphs max) unless the user wants more depth.
 - Use warm, natural language — not clinical jargon.
 - Ask one follow-up question at the end of each response to keep dialogue flowing.
-- Remember and reference earlier parts of the conversation to show you're truly listening."""
+- Remember and reference earlier parts of the conversation to show you're truly listening.
+
+## Word-Level Emotion Analysis
+When the user's message contains emotion-tagged text in the format `<emotion>words</emotion>`, this represents real-time speech emotion detected at the word level. For example:
+- `<neutral>I really thought</neutral> <sad>it would be different this time</sad>`
+- This means the words "I really thought" were spoken neutrally, but "it would be different this time" had sadness detected in the voice.
+
+Use these emotion tags to:
+1. Understand the emotional journey within a single utterance
+2. Identify which specific topics/words trigger emotional shifts
+3. Respond with appropriate empathy to the most emotionally charged segments
+
+When responding, start your response with a target emotion tag on its own line:
+`[Target Emotion: empathetic]`
+This tells the text-to-speech system what emotion to use for your voice response.
+Valid target emotions: happy, sad, angry, neutral, empathetic, fearful
+Choose the emotion that best matches the therapeutic tone of your response."""
 
 
-def build_emotion_context(fused_emotion: Optional[dict]) -> str:
+def build_emotion_context(
+    fused_emotion: Optional[dict] = None, tagged_text: Optional[str] = None
+) -> str:
     """Build an emotion context addendum for the system prompt."""
-    if not fused_emotion:
+    if not fused_emotion and not tagged_text:
         return ""
 
     parts = []
 
-    audio_emo = fused_emotion.get("audio", {})
-    video_emo = fused_emotion.get("video", {})
-    dominant = fused_emotion.get("dominant", "neutral")
-    confidence = fused_emotion.get("confidence", 0.0)
+    if tagged_text:
+        parts.append(f"\n\n## Word-Level Emotion Tags (from user's speech)")
+        parts.append(f"The user said: {tagged_text}")
 
-    parts.append(f"\n\n## Current Emotional State (Detected)")
-    parts.append(f"- **Dominant emotion**: {dominant} (confidence: {confidence:.0%})")
+    if fused_emotion:
+        audio_emo = fused_emotion.get("audio", {})
+        video_emo = fused_emotion.get("video", {})
+        dominant = fused_emotion.get("dominant", "neutral")
+        confidence = fused_emotion.get("confidence", 0.0)
 
-    if audio_emo.get("emotion") and audio_emo["emotion"] != "neutral":
-        parts.append(f"- **Voice tone**: {audio_emo['emotion']}")
-
-    if video_emo.get("emotion") and video_emo["emotion"] != "neutral":
-        parts.append(f"- **Facial expression**: {video_emo['emotion']}")
-
-    # Detect emotional incongruence (saying one thing, showing another)
-    if (
-        audio_emo.get("emotion")
-        and video_emo.get("emotion")
-        and audio_emo["emotion"] != video_emo["emotion"]
-        and audio_emo["emotion"] != "neutral"
-        and video_emo["emotion"] != "neutral"
-    ):
+        parts.append(f"\n\n## Current Emotional State (Detected)")
         parts.append(
-            f"- ⚠️ **Incongruence detected**: Voice suggests '{audio_emo['emotion']}' "
-            f"but facial expression shows '{video_emo['emotion']}'. "
-            f"Gently explore this if appropriate."
+            f"- **Dominant emotion**: {dominant} (confidence: {confidence:.0%})"
         )
 
-    # Guidance based on specific emotions
-    if dominant in ("sad", "fearful"):
-        parts.append(
-            "- Approach with extra gentleness and warmth. Prioritize validation."
-        )
-    elif dominant == "angry":
-        parts.append(
-            "- Acknowledge the anger without escalating. Help explore what's underneath."
-        )
-    elif dominant == "happy":
-        parts.append("- Share in their positive energy. Explore what's going well.")
-    elif dominant == "surprised":
-        parts.append(
-            "- Help them process what surprised them. Check if it's positive or negative surprise."
-        )
+        if audio_emo.get("emotion") and audio_emo["emotion"] != "neutral":
+            parts.append(f"- **Voice tone**: {audio_emo['emotion']}")
+
+        if video_emo.get("emotion") and video_emo["emotion"] != "neutral":
+            parts.append(f"- **Facial expression**: {video_emo['emotion']}")
+
+        # Detect emotional incongruence (saying one thing, showing another)
+        if (
+            audio_emo.get("emotion")
+            and video_emo.get("emotion")
+            and audio_emo["emotion"] != video_emo["emotion"]
+            and audio_emo["emotion"] != "neutral"
+            and video_emo["emotion"] != "neutral"
+        ):
+            parts.append(
+                f"- ⚠️ **Incongruence detected**: Voice suggests '{audio_emo['emotion']}' "
+                f"but facial expression shows '{video_emo['emotion']}'. "
+                f"Gently explore this if appropriate."
+            )
+
+        # Guidance based on specific emotions
+        if dominant in ("sad", "fearful"):
+            parts.append(
+                "- Approach with extra gentleness and warmth. Prioritize validation."
+            )
+        elif dominant == "angry":
+            parts.append(
+                "- Acknowledge the anger without escalating. Help explore what's underneath."
+            )
+        elif dominant == "happy":
+            parts.append("- Share in their positive energy. Explore what's going well.")
+        elif dominant == "surprised":
+            parts.append(
+                "- Help them process what surprised them. Check if it's positive or negative surprise."
+            )
 
     return "\n".join(parts)
+
+
+def parse_llm_response(response: str) -> tuple[str, str]:
+    """Extract target emotion and clean text from LLM response.
+
+    LLM is instructed to start responses with: [Target Emotion: empathetic]
+    Returns (target_emotion, clean_text). If no tag found, returns ("neutral", original_text).
+    """
+    pattern = r"^\[Target Emotion:\s*(\w+)\]\s*"
+    match = re.search(pattern, response, re.IGNORECASE)
+
+    if match:
+        target_emotion = match.group(1).lower()
+        clean_text = response[match.end() :].strip()
+        return target_emotion, clean_text
+
+    return "neutral", response
 
 
 class ChatEngine:
@@ -124,14 +167,27 @@ class ChatEngine:
         self,
         messages: list[dict],
         fused_emotion: Optional[dict] = None,
+        tagged_text: Optional[str] = None,
     ) -> list[dict]:
         """Build the full message list with system prompt + emotion context."""
-        system_prompt = BASE_SYSTEM_PROMPT + build_emotion_context(fused_emotion)
+        system_prompt = BASE_SYSTEM_PROMPT + build_emotion_context(
+            fused_emotion, tagged_text
+        )
 
         full_messages = [{"role": "system", "content": system_prompt}]
 
         # Include conversation history (keep last 20 messages to fit context)
         history = messages[-20:] if len(messages) > 20 else messages
+
+        # If tagged_text is provided, enhance the last user message
+        if tagged_text and history and history[-1]["role"] == "user":
+            history = history[:-1] + [
+                {
+                    "role": "user",
+                    "content": f"[Transcribed with emotions]: {tagged_text}\n\n{history[-1]['content']}",
+                }
+            ]
+
         full_messages.extend(history)
 
         return full_messages
@@ -140,9 +196,10 @@ class ChatEngine:
         self,
         messages: list[dict],
         fused_emotion: Optional[dict] = None,
+        tagged_text: Optional[str] = None,
     ) -> str:
         """Non-streaming chat. Returns full response text."""
-        full_messages = self._build_messages(messages, fused_emotion)
+        full_messages = self._build_messages(messages, fused_emotion, tagged_text)
 
         try:
             response = await self.client.chat(
@@ -164,9 +221,10 @@ class ChatEngine:
         self,
         messages: list[dict],
         fused_emotion: Optional[dict] = None,
+        tagged_text: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """Streaming chat. Yields individual tokens."""
-        full_messages = self._build_messages(messages, fused_emotion)
+        full_messages = self._build_messages(messages, fused_emotion, tagged_text)
 
         try:
             stream = await self.client.chat(
