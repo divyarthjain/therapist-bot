@@ -4,8 +4,10 @@ Combines SenseVoice (audio emotion), face-api.js results (video emotion),
 and Ollama gemma3:4b (therapeutic chat) into a multimodal therapy assistant.
 """
 
+import base64
 import json
 import logging
+import time
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -15,8 +17,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from audio_analyzer import AudioAnalyzer
-from chat_engine import ChatEngine
+from asr_engine import create_asr_engine
+from chat_engine import ChatEngine, parse_llm_response
+from emotion_aligner import align_emotions, format_tagged_text
 from emotion_fusion import EmotionFusion
+from emotion_ser import SpeechEmotionRecognizer
+from tts_engine import TTSEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,6 +42,9 @@ app.add_middleware(
 audio_analyzer: Optional[AudioAnalyzer] = None
 chat_engine: Optional[ChatEngine] = None
 emotion_fusion = EmotionFusion()
+asr_engine = None
+ser_engine: Optional[SpeechEmotionRecognizer] = None
+tts_engine: Optional[TTSEngine] = None
 
 # Per-session conversation histories: session_id → list of messages
 sessions: dict[str, dict] = {}
@@ -58,12 +67,48 @@ def get_or_create_session(session_id: Optional[str] = None) -> str:
 
 @app.on_event("startup")
 async def startup():
-    global audio_analyzer, chat_engine
-    logger.info("Loading SenseVoice model (this may take 30-60s on first run)...")
-    audio_analyzer = AudioAnalyzer()
-    logger.info("SenseVoice loaded.")
-    chat_engine = ChatEngine()
-    logger.info("Chat engine ready (Ollama gemma3:4b).")
+    global audio_analyzer, chat_engine, asr_engine, ser_engine, tts_engine
+    try:
+        logger.info("Loading SenseVoice model (this may take 30-60s on first run)...")
+        audio_analyzer = AudioAnalyzer()
+        logger.info("SenseVoice loaded.")
+    except Exception as e:
+        logger.error("Failed to load SenseVoice: %s", e)
+        audio_analyzer = None
+
+    try:
+        chat_engine = ChatEngine()
+        logger.info("Chat engine ready (Ollama gemma3:4b).")
+    except Exception as e:
+        logger.error("Failed to load chat engine: %s", e)
+        chat_engine = None
+
+    try:
+        logger.info("Loading ASR engine...")
+        asr_engine = create_asr_engine()
+        logger.info("ASR engine ready.")
+    except Exception as e:
+        logger.error("Failed to load ASR engine: %s", e)
+        asr_engine = None
+
+    try:
+        logger.info("Loading Speech Emotion Recognizer...")
+        ser_engine = SpeechEmotionRecognizer()
+        logger.info("SER ready.")
+    except Exception as e:
+        logger.error("Failed to load SER: %s", e)
+        ser_engine = None
+
+    try:
+        logger.info("Loading TTS engine...")
+        tts_engine = TTSEngine()
+        logger.info(
+            "TTS engine ready (loaded=%s).",
+            tts_engine.is_loaded() if tts_engine else False,
+        )
+    except Exception as e:
+        logger.error("Failed to load TTS: %s", e)
+        tts_engine = None
 
 
 # ── REST Endpoints ────────────────────────────────────────────────────────────
@@ -88,6 +133,80 @@ async def health():
         "status": "ok",
         "sensevoice_loaded": audio_analyzer is not None,
         "ollama_ready": chat_engine is not None,
+        "asr_loaded": asr_engine is not None,
+        "ser_loaded": ser_engine is not None,
+        "tts_loaded": tts_engine is not None and tts_engine.is_loaded(),
+    }
+
+
+async def run_voice_pipeline(
+    audio_bytes: bytes, filename: str, session_id: str
+) -> dict:
+    import torch
+
+    timings = {}
+
+    t0 = time.time()
+    asr_result = asr_engine.transcribe(audio_bytes, filename)
+    timings["asr_ms"] = round((time.time() - t0) * 1000)
+
+    if not asr_result.segments:
+        return {
+            "response_text": "",
+            "emotion_tags": "",
+            "target_emotion": "neutral",
+            "audio_base64": None,
+            "timings": timings,
+            "transcription": "",
+        }
+
+    t0 = time.time()
+    import numpy as np
+
+    audio_np = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+    audio_tensor = torch.tensor(audio_np).unsqueeze(0)
+    emotion_frames = ser_engine.analyze_frames(audio_tensor, 16000)
+    timings["ser_ms"] = round((time.time() - t0) * 1000)
+
+    t0 = time.time()
+    word_emotions = align_emotions(asr_result.segments, emotion_frames)
+    tagged_text = format_tagged_text(word_emotions)
+    timings["align_ms"] = round((time.time() - t0) * 1000)
+
+    t0 = time.time()
+    sid = get_or_create_session(session_id)
+    sessions[sid]["messages"].append({"role": "user", "content": asr_result.full_text})
+
+    response = await chat_engine.chat(
+        messages=sessions[sid]["messages"],
+        tagged_text=tagged_text,
+        fused_emotion=emotion_fusion.get_fused_emotion(),
+    )
+
+    target_emotion, clean_response = parse_llm_response(response)
+    sessions[sid]["messages"].append({"role": "assistant", "content": clean_response})
+    timings["llm_ms"] = round((time.time() - t0) * 1000)
+
+    audio_base64 = None
+    if tts_engine and tts_engine.is_loaded():
+        t0 = time.time()
+        audio_wav = tts_engine.generate_speech(clean_response, emotion=target_emotion)
+        timings["tts_ms"] = round((time.time() - t0) * 1000)
+        if audio_wav:
+            audio_base64 = base64.b64encode(audio_wav).decode("utf-8")
+
+    total = sum(v for v in timings.values())
+    timings["total_ms"] = total
+    logger.info("Voice pipeline complete: %s", timings)
+
+    return {
+        "response_text": clean_response,
+        "emotion_tags": tagged_text,
+        "target_emotion": target_emotion,
+        "audio_base64": audio_base64,
+        "timings": timings,
+        "transcription": asr_result.full_text,
+        "session_id": sid,
     }
 
 
@@ -167,6 +286,21 @@ async def chat(data: ChatRequest):
         "session_id": sid,
         "detected_emotions": fused,
     }
+
+
+@app.post("/api/chat/voice")
+async def chat_voice(
+    file: UploadFile = File(...),
+    session_id: Optional[str] = None,
+):
+    if not asr_engine or not ser_engine or not chat_engine:
+        return {"error": "Pipeline engines not fully loaded"}
+
+    audio_bytes = await file.read()
+    result = await run_voice_pipeline(
+        audio_bytes, file.filename or "audio.wav", session_id
+    )
+    return result
 
 
 # ── WebSocket for Streaming Chat ──────────────────────────────────────────────
@@ -263,6 +397,43 @@ async def websocket_chat(websocket: WebSocket):
                     {
                         "role": "assistant",
                         "content": full_response,
+                    }
+                )
+
+            elif msg_type == "voice_message":
+                if not asr_engine or not ser_engine or not chat_engine:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": "Pipeline engines not fully loaded",
+                        }
+                    )
+                    continue
+
+                session_id = get_or_create_session(session_id or data.get("session_id"))
+
+                audio_b64 = data.get("audio", "")
+                if not audio_b64:
+                    await websocket.send_json(
+                        {"type": "error", "message": "No audio data"}
+                    )
+                    continue
+
+                audio_bytes = base64.b64decode(audio_b64)
+                result = await run_voice_pipeline(
+                    audio_bytes, "ws_audio.wav", session_id
+                )
+
+                await websocket.send_json(
+                    {
+                        "type": "voice_response",
+                        "response_text": result["response_text"],
+                        "emotion_tags": result["emotion_tags"],
+                        "target_emotion": result["target_emotion"],
+                        "audio_base64": result.get("audio_base64"),
+                        "timings": result["timings"],
+                        "transcription": result["transcription"],
+                        "done": True,
                     }
                 )
 
