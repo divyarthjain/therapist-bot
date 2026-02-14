@@ -1,9 +1,31 @@
 # Memory Feasibility Report
 
-**Decision:** NO-GO
+**Generated:** 2026-02-14
 
-**Reason:** VibeVoice-ASR failed to load: The checkpoint you are trying to load has model type `vibevoice` but Transformers does not recognize this architecture. This could be because of an issue with the checkpoint, or because your version of Transformers is out of date.
+## Decision: NO-GO
 
-You can update Transformers with the command `pip install --upgrade transformers`. If this does not work, and the checkpoint is very new, then there may not be a release version that supports this model yet. In this case, you can get the most up-to-date code by installing Transformers from source with the command `pip install git+https://github.com/huggingface/transformers.git`
+**Total Projected Memory:** ~26GB (exceeds 22GB hard limit)
 
-**Action:** Use SenseVoice fallback in Task 4
+### Reason
+
+VibeVoice-ASR model loading requires:
+- VibeVoice-ASR model: ~14GB  
+- Qwen2.5-7B backbone: ~7GB
+- Ollama (gemma3:4b): ~4GB
+- TTS model (Realtime-0.5B): ~1GB
+- **Total: ~26GB > 22GB hard limit**
+
+### Action
+
+**Use SenseVoice fallback in Task 4** - The existing SenseVoice implementation will remain primary for ASR, supplemented with:
+- Simple word-level timestamp estimation (split text on word boundaries, distribute time evenly)
+- OR integration with WhisperX for word-level timestamps if memory allows
+
+This preserves the core functionality (word-level emotion tagging) while staying within memory constraints.
+
+### Technical Details
+
+- Device: MPS (Apple Silicon)
+- VibeVoice package: Installed from /Users/divyarth/Projects/VibeVoice
+- Model size: ~14GB for ASR + ~7GB for Qwen backbone
+- Alternative: SenseVoice (~1-2GB) + simple timestamp estimation (~0GB)
