@@ -165,7 +165,7 @@ async def run_voice_pipeline(
 
     audio_np = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
     audio_tensor = torch.tensor(audio_np).unsqueeze(0)
-    emotion_frames = ser_engine.analyze_frames(audio_tensor, 16000)
+    emotion_frames = ser_engine.analyze_frames_from_array(audio_np, 16000)
     timings["ser_ms"] = round((time.time() - t0) * 1000)
 
     t0 = time.time()

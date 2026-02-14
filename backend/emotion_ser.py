@@ -172,6 +172,97 @@ class SpeechEmotionRecognizer:
             logger.error(f"Error in SER analysis: {e}")
             return []
 
+    def analyze_frames_from_array(
+        self, waveform: np.ndarray, sample_rate: int = 16000
+    ) -> List[Dict[str, float]]:
+        """
+        Analyze audio from numpy array and return emotion probabilities per frame.
+
+        Args:
+            waveform: Numpy array of audio samples (float32, normalized to [-1, 1]).
+            sample_rate: Sample rate of the audio (default: 16000).
+
+        Returns:
+            List of dicts: [{"timestamp": 0.0, "emotion": "neutral", "confidence": 0.9, "raw_label": "neutral"}, ...]
+        """
+        if not self._loaded:
+            logger.warning("SER model not loaded, returning empty analysis")
+            return []
+
+        try:
+            # Ensure float32
+            if waveform.dtype != np.float32:
+                waveform = waveform.astype(np.float32)
+
+            # Convert to mono if stereo (flatten batch dimension)
+            if len(waveform.shape) > 1:
+                waveform = np.mean(waveform, axis=1)
+
+            # Resample to 16kHz if needed
+            target_sr = 16000
+            if sample_rate != target_sr:
+                num_samples = int(len(waveform) * target_sr / sample_rate)
+                waveform = scipy.signal.resample(waveform, num_samples)
+                sample_rate = target_sr
+
+            # Process with transformers
+            inputs = self.processor(
+                waveform, sampling_rate=16000, return_tensors="pt", padding=True
+            )
+
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+            with torch.no_grad():
+                # Forward pass to get hidden states
+                outputs = self.model.wav2vec2(**inputs)
+                hidden_states = outputs.last_hidden_state
+
+                # Apply classifier head manually to each frame
+                if hasattr(self.model, "projector"):
+                    projected = self.model.projector(hidden_states)
+                    logits = self.model.classifier(projected)
+                else:
+                    logits = self.model.classifier(hidden_states)
+
+                probs = torch.softmax(logits, dim=-1)
+
+                # Convert to list of frame results
+                results = []
+                probs_np = probs.cpu().numpy()[0]  # Batch size 1
+
+                # Get label mapping from model config
+                id2label = self.model.config.id2label
+
+                # Wav2Vec2 downsampling factor is 320
+                # Frame duration = 320 / 16000 = 0.02s (20ms)
+                frame_duration = 0.02
+
+                for i, frame_probs in enumerate(probs_np):
+                    # Get top emotion
+                    top_idx = np.argmax(frame_probs)
+                    top_prob = float(frame_probs[top_idx])
+                    raw_label = id2label[top_idx]
+
+                    # Map to canonical label
+                    emotion = LABEL_MAPPING.get(raw_label, "neutral")
+
+                    timestamp = i * frame_duration
+
+                    results.append(
+                        {
+                            "timestamp": round(timestamp, 3),
+                            "emotion": emotion,
+                            "confidence": round(top_prob, 3),
+                            "raw_label": raw_label,
+                        }
+                    )
+
+                return results
+
+        except Exception as e:
+            logger.error(f"Error in SER array analysis: {e}")
+            return []
+
 
 if __name__ == "__main__":
     # Simple test
