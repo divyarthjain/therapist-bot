@@ -1,107 +1,91 @@
 .webcam-emotion {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.webcam-emotion__header {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: #000;
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-.webcam-emotion__title {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #4a6a8a;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.webcam-emotion__live {
-  width: 8px;
-  height: 8px;
-  background: #6cc6a1;
-  border-radius: 50%;
-  animation: livePulse 1.5s ease-in-out infinite;
-}
-@keyframes livePulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  justify-content: center;
 }
 
-.webcam-emotion__video-container {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #e8ecf0;
-}
 .webcam-emotion__video {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1);
+  transform: scaleX(-1); /* Mirror effect */
+}
+
+.webcam-emotion__video.hidden {
+  display: none;
 }
 
 .webcam-emotion__placeholder {
-  position: absolute;
-  inset: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #a0b0c0;
-  font-size: 0.85rem;
+  background: #1a1a24;
+  color: #555;
 }
-.webcam-emotion__placeholder span {
-  font-size: 1.8rem;
-  margin-bottom: 4px;
-}
-.webcam-emotion__placeholder p {
-  margin: 0;
+
+.webcam-emotion__placeholder-icon {
+  font-size: 1.5rem;
+  opacity: 0.5;
 }
 
 .webcam-emotion__overlay {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 6px 10px;
-  background: linear-gradient(transparent, rgba(0,0,0,0.5));
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  padding: 4px 8px;
+  border-radius: 6px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-size: 0.75rem;
   color: #fff;
-  font-size: 0.8rem;
-}
-.webcam-emotion__detected {
-  font-weight: 600;
-  text-transform: capitalize;
-}
-.webcam-emotion__confidence {
-  opacity: 0.8;
 }
 
-.webcam-emotion__toggle {
-  padding: 6px 12px;
-  border: 1px solid #dce3eb;
-  border-radius: 8px;
-  background: #f9fbfc;
-  color: #4a6a8a;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: all 0.2s;
+.webcam-emotion__detected {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
 }
-.webcam-emotion__toggle:hover:not(:disabled) {
-  background: #e3f0ff;
-  border-color: #4a90d9;
+
+.webcam-emotion__confidence {
+  opacity: 0.7;
+  font-size: 0.7rem;
 }
-.webcam-emotion__toggle--active {
-  background: #e3f0ff;
-  border-color: #4a90d9;
-  color: #4a90d9;
+
+.webcam-emotion__loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  z-index: 10;
 }
-.webcam-emotion__toggle:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+
+.webcam-emotion__loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+

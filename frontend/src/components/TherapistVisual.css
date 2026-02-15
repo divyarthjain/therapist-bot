@@ -1,0 +1,102 @@
+.therapist-visual {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(circle at center, #2a2a35 0%, #0f0f14 70%);
+}
+
+.therapist-visual__orb-container {
+  position: relative;
+  width: 300px;
+  height: 300px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.therapist-visual__orb {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c6cff 0%, #4ecdc4 100%);
+  box-shadow: 0 0 60px rgba(124, 108, 255, 0.4);
+  filter: blur(10px);
+  animation: breathe 6s ease-in-out infinite;
+  position: relative;
+  z-index: 10;
+}
+
+.therapist-visual__orb--streaming {
+  animation: pulse-speak 1.5s ease-in-out infinite alternate;
+}
+
+.therapist-visual__glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 108, 255, 0.2) 0%, transparent 70%);
+  animation: rotate-glow 10s linear infinite;
+  z-index: 5;
+}
+
+.therapist-visual__info {
+  margin-top: 40px;
+  text-align: center;
+  z-index: 20;
+}
+
+.therapist-visual__name {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.therapist-visual__role {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.therapist-visual__emotion {
+  position: absolute;
+  top: 40px;
+  right: 40px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  backdrop-filter: blur(10px);
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+
+@keyframes pulse-speak {
+  0% { transform: scale(1); filter: blur(10px) brightness(1); }
+  100% { transform: scale(1.3); filter: blur(5px) brightness(1.2); }
+}
+
+@keyframes rotate-glow {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
