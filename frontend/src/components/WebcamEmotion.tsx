@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useFaceDetection } from '../hooks/useFaceDetection'
-import { EMOTION_EMOJI } from '../types'
 import './WebcamEmotion.css'
 
 interface Props {
@@ -13,7 +12,6 @@ export function WebcamEmotion({ isActive, onEmotionDetected }: Props) {
   const streamRef = useRef<MediaStream | null>(null)
   const {
     isModelLoaded,
-    isDetecting,
     currentEmotion,
     confidence,
     startDetection,
@@ -21,12 +19,26 @@ export function WebcamEmotion({ isActive, onEmotionDetected }: Props) {
   } = useFaceDetection()
 
   const lastEmotionRef = useRef('')
+  const currentEmotionRef = useRef(currentEmotion)
+  const confidenceRef = useRef(confidence)
+  const onEmotionDetectedRef = useRef(onEmotionDetected)
+  const startDetectionRef = useRef(startDetection)
+  const stopDetectionRef = useRef(stopDetection)
+
+  useEffect(() => {
+    currentEmotionRef.current = currentEmotion
+    confidenceRef.current = confidence
+    onEmotionDetectedRef.current = onEmotionDetected
+    startDetectionRef.current = startDetection
+    stopDetectionRef.current = stopDetection
+  })
+
   const checkEmotionChange = useCallback(() => {
-    if (currentEmotion !== lastEmotionRef.current) {
-      lastEmotionRef.current = currentEmotion
-      onEmotionDetected(currentEmotion, confidence)
+    if (currentEmotionRef.current !== lastEmotionRef.current) {
+      lastEmotionRef.current = currentEmotionRef.current
+      onEmotionDetectedRef.current(currentEmotionRef.current, confidenceRef.current)
     }
-  }, [currentEmotion, confidence, onEmotionDetected])
+  }, []) // Empty deps — stable forever
 
   // Poll for emotion changes while detecting
   const pollRef = useRef<ReturnType<typeof setInterval>>(undefined)
@@ -46,6 +58,8 @@ export function WebcamEmotion({ isActive, onEmotionDetected }: Props) {
            console.error("Browser API navigator.mediaDevices.getUserMedia not available");
            return;
         }
+
+        if (streamRef.current) return
         
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 320, height: 240, facingMode: 'user' },
@@ -62,7 +76,7 @@ export function WebcamEmotion({ isActive, onEmotionDetected }: Props) {
           videoRef.current.onloadedmetadata = () => {
             if (mounted && videoRef.current) {
               videoRef.current.play().catch(e => console.error("Play failed", e))
-              startDetection(videoRef.current)
+              startDetectionRef.current(videoRef.current)
               startPolling()
             }
           }
@@ -73,7 +87,7 @@ export function WebcamEmotion({ isActive, onEmotionDetected }: Props) {
     }
 
     const stopCamera = () => {
-      stopDetection()
+      stopDetectionRef.current()
       if (pollRef.current) {
         clearInterval(pollRef.current)
         pollRef.current = undefined
@@ -97,7 +111,7 @@ export function WebcamEmotion({ isActive, onEmotionDetected }: Props) {
       mounted = false
       stopCamera()
     }
-  }, [isActive, startDetection, stopDetection, startPolling])
+  }, [isActive, startPolling])
 
   return (
     <div className="webcam-emotion">
@@ -110,16 +124,6 @@ export function WebcamEmotion({ isActive, onEmotionDetected }: Props) {
       {!isActive && (
         <div className="webcam-emotion__placeholder">
           <span className="webcam-emotion__placeholder-icon">📷</span>
-        </div>
-      )}
-      {isActive && isDetecting && (
-        <div className="webcam-emotion__overlay">
-          <span className="webcam-emotion__detected">
-            {EMOTION_EMOJI[currentEmotion] ?? '😐'} {currentEmotion}
-          </span>
-          <span className="webcam-emotion__confidence">
-            {Math.round(confidence * 100)}%
-          </span>
         </div>
       )}
       {isActive && !isModelLoaded && (
