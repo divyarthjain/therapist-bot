@@ -5,7 +5,12 @@ import type {
   WSIncoming,
 } from '../types'
 
-const WS_URL = `ws://${window.location.host}/ws/chat`
+interface LastVoiceResponse {
+  audio_base64: string | null
+  id: string
+}
+
+const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/chat`
 const MAX_RECONNECT_DELAY = 30_000
 const BASE_RECONNECT_DELAY = 1_000
 
@@ -20,6 +25,7 @@ export function useWebSocket() {
   const [emotionState, setEmotionState] = useState<EmotionState | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastVoiceResponse, setLastVoiceResponse] = useState<LastVoiceResponse | null>(null)
 
   // Accumulates streaming tokens for the current assistant response
   const streamBuffer = useRef('')
@@ -81,6 +87,33 @@ export function useWebSocket() {
           setError(data.message)
           setIsStreaming(false)
           break
+
+        case 'voice_response':
+          if (data.done) {
+            if (data.transcription) {
+              const userMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: 'user',
+                content: data.transcription,
+                timestamp: Date.now(),
+              }
+              setMessages((prev) => [...prev, userMsg])
+            }
+            if (data.response_text) {
+              const assistantMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: data.response_text,
+                timestamp: Date.now(),
+              }
+              setMessages((prev) => [...prev, assistantMsg])
+            }
+            setLastVoiceResponse({
+              audio_base64: data.audio_base64 ?? null,
+              id: crypto.randomUUID(),
+            })
+          }
+          break
       }
     }
 
@@ -116,7 +149,6 @@ export function useWebSocket() {
         role: 'user',
         content,
         timestamp: Date.now(),
-        emotion: audioEmotion ?? videoEmotion,
       }
       setMessages((prev) => [...prev, userMsg])
 
@@ -150,6 +182,17 @@ export function useWebSocket() {
     )
   }, [])
 
+  const sendVoiceMessage = useCallback((audioBase64: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
+    wsRef.current.send(
+      JSON.stringify({ type: 'voice_message', audio: audioBase64 }),
+    )
+  }, [])
+
+  const clearLastVoiceResponse = useCallback(() => {
+    setLastVoiceResponse(null)
+  }, [])
+
   return {
     isConnected,
     sessionId,
@@ -159,6 +202,9 @@ export function useWebSocket() {
     error,
     sendMessage,
     sendEmotion,
+    sendVoiceMessage,
+    lastVoiceResponse,
+    clearLastVoiceResponse,
   }
 }
 
