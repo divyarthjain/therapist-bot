@@ -1,0 +1,88 @@
+.call-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e8e8ed;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  backdrop-filter: blur(5px);
+  position: relative;
+}
+
+.call-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.call-btn__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-btn__status {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 8px;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  pointer-events: none;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.call-btn--active {
+  background: rgba(108, 198, 161, 0.2);
+  border-color: rgba(108, 198, 161, 0.4);
+  color: #fff;
+}
+
+.call-btn--active:hover {
+  background: rgba(255, 92, 92, 0.2);
+  border-color: rgba(255, 92, 92, 0.4);
+  color: #ff5c5c;
+}
+
+.call-btn--listening {
+  animation: callPulseGreen 2s ease-in-out infinite;
+  border-color: rgba(108, 198, 161, 0.6);
+}
+
+.call-btn--processing {
+  animation: callPulseAmber 1.5s ease-in-out infinite;
+  border-color: rgba(255, 193, 7, 0.6);
+}
+
+.call-btn--speaking {
+  animation: callPulsePurple 2s ease-in-out infinite;
+  border-color: rgba(124, 108, 255, 0.6);
+}
+
+@keyframes callPulseGreen {
+  0% { box-shadow: 0 0 0 0 rgba(108, 198, 161, 0.4); }
+  70% { box-shadow: 0 0 0 15px rgba(108, 198, 161, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(108, 198, 161, 0); }
+}
+
+@keyframes callPulseAmber {
+  0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+  70% { box-shadow: 0 0 0 15px rgba(255, 193, 7, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+}
+
+@keyframes callPulsePurple {
+  0% { box-shadow: 0 0 0 0 rgba(124, 108, 255, 0.4); }
+  70% { box-shadow: 0 0 0 15px rgba(124, 108, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(124, 108, 255, 0); }
+}

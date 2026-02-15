@@ -100,3 +100,56 @@
   0% { transform: translate(-50%, -50%) rotate(0deg); }
   100% { transform: translate(-50%, -50%) rotate(360deg); }
 }
+
+.therapist-visual__orb--listening {
+  animation: orb-listen 2s ease-in-out infinite;
+  background: linear-gradient(135deg, #6cc6a1 0%, #4ecdc4 100%);
+  box-shadow: 0 0 60px rgba(108, 198, 161, 0.5);
+}
+
+.therapist-visual__orb--processing {
+  animation: orb-process 0.8s ease-in-out infinite alternate;
+  background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+  box-shadow: 0 0 60px rgba(255, 193, 7, 0.5);
+}
+
+.therapist-visual__orb--speaking {
+  animation: orb-speak 1s ease-in-out infinite alternate;
+  background: linear-gradient(135deg, #7c6cff 0%, #a78bfa 100%);
+  box-shadow: 0 0 80px rgba(124, 108, 255, 0.6);
+}
+
+.therapist-visual__call-status {
+  margin-top: 12px;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.therapist-visual__call-status--listening {
+  color: #6cc6a1;
+}
+
+.therapist-visual__call-status--processing {
+  color: #ffc107;
+}
+
+.therapist-visual__call-status--speaking {
+  color: #a78bfa;
+}
+
+@keyframes orb-listen {
+  0%, 100% { transform: scale(1); opacity: 0.85; filter: blur(10px); }
+  50% { transform: scale(1.05); opacity: 1; filter: blur(8px); }
+}
+
+@keyframes orb-process {
+  0% { transform: scale(0.95); filter: blur(12px) brightness(0.9); }
+  100% { transform: scale(1.1); filter: blur(8px) brightness(1.2); }
+}
+
+@keyframes orb-speak {
+  0% { transform: scale(1); filter: blur(8px) brightness(1); }
+  100% { transform: scale(1.25); filter: blur(5px) brightness(1.3); }
+}
