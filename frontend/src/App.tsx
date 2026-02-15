@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWebSocket } from './hooks/useWebSocket'
+import { useVoiceCall } from './hooks/useVoiceCall'
 import { ChatPanel } from './components/ChatPanel'
 import { AudioRecorder } from './components/AudioRecorder'
+import { CallButton } from './components/CallButton'
 import { WebcamEmotion } from './components/WebcamEmotion'
-import { EmotionDisplay } from './components/EmotionDisplay'
 import { TherapistVisual } from './components/TherapistVisual'
 
 function App() {
@@ -11,18 +12,23 @@ function App() {
     isConnected,
     sessionId,
     messages,
-    emotionState,
     isStreaming,
     error,
     sendMessage,
     sendEmotion,
+    sendVoiceMessage,
+    lastVoiceResponse,
+    clearLastVoiceResponse,
   } = useWebSocket()
+
+  const { callState, isCallActive, toggleCall, playResponseAndResume, setCallState } = useVoiceCall({
+    onSpeechEnd: sendVoiceMessage,
+  })
 
   // State
   const [pendingTranscription, setPendingTranscription] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [isCameraActive, setIsCameraActive] = useState(true)
-  const [showEmotionPanel, setShowEmotionPanel] = useState(false)
 
   // Refs
   const audioEmotionRef = useRef<string | undefined>(undefined)
@@ -37,6 +43,29 @@ function App() {
       inputRef.current?.focus()
     }
   }, [pendingTranscription])
+
+  useEffect(() => {
+    if (!isCallActive || !lastVoiceResponse) return
+
+    if (callState !== 'processing') {
+      clearLastVoiceResponse()
+      return
+    }
+
+    if (lastVoiceResponse.audio_base64) {
+      playResponseAndResume(lastVoiceResponse.audio_base64)
+    } else {
+      setCallState('listening')
+    }
+
+    clearLastVoiceResponse()
+  }, [lastVoiceResponse, isCallActive, callState, playResponseAndResume, clearLastVoiceResponse, setCallState])
+
+  useEffect(() => {
+    if (isCallActive && callState === 'processing' && error) {
+      setCallState('listening')
+    }
+  }, [isCallActive, callState, error, setCallState])
 
   // Handlers
   const handleSendClick = useCallback(() => {
@@ -93,7 +122,7 @@ function App() {
       {/* Main Stage */}
       <div className="app__stage">
         {/* Therapist Visual */}
-        <TherapistVisual isStreaming={isStreaming} emotionState={emotionState} />
+         <TherapistVisual isStreaming={isStreaming} callState={callState} />
 
         {/* User PIP */}
         <div className="app__pip">
@@ -104,30 +133,26 @@ function App() {
         </div>
 
         {/* Chat Overlay */}
-        <div className="app__chat-overlay">
-          <ChatPanel
-            messages={messages}
-            isStreaming={isStreaming}
-            isConnected={isConnected}
-          />
-        </div>
-
-        {/* Emotion Floating Panel */}
-        {showEmotionPanel && (
-          <EmotionDisplay 
-            emotionState={emotionState} 
-            onClose={() => setShowEmotionPanel(false)} 
-          />
-        )}
-      </div>
+         <div className="app__chat-overlay">
+           <ChatPanel
+             messages={messages}
+             isStreaming={isStreaming}
+             isConnected={isConnected}
+           />
+         </div>
+       </div>
 
       {/* Bottom Control Bar */}
       <div className="app__bottom-bar">
-        <AudioRecorder
-          sessionId={sessionId}
-          onTranscription={handleTranscription}
-          onAudioEmotion={handleAudioEmotion}
-        />
+        <CallButton callState={callState} onToggle={toggleCall} />
+
+        {!isCallActive && (
+          <AudioRecorder
+            sessionId={sessionId}
+            onTranscription={handleTranscription}
+            onAudioEmotion={handleAudioEmotion}
+          />
+        )}
 
         <button 
           className="control-btn"
@@ -139,15 +164,6 @@ function App() {
           }}
         >
           {isCameraActive ? '📷' : '🚫'}
-        </button>
-
-        <button 
-          className="control-btn"
-          onClick={() => setShowEmotionPanel(!showEmotionPanel)}
-          title="Toggle emotion analysis"
-          style={{ background: showEmotionPanel ? 'rgba(124, 108, 255, 0.25)' : 'rgba(255, 255, 255, 0.1)' }}
-        >
-          📊
         </button>
 
         <textarea
