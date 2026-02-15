@@ -1,7 +1,6 @@
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ChatMessage } from '../types'
-import { EMOTION_EMOJI } from '../types'
 import './MessageBubble.css'
 
 interface Props {
@@ -26,11 +25,6 @@ export function MessageBubble({ message }: Props) {
           )}
         </div>
         <div className="bubble__meta">
-          {message.emotion && (
-            <span className="bubble__emotion">
-              {EMOTION_EMOJI[message.emotion] ?? '😐'}
-            </span>
-          )}
           <span className="bubble__time">{time}</span>
         </div>
       </div>
