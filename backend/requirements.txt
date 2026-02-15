@@ -18,10 +18,12 @@ numpy<2.0.0
 # Install from: https://github.com/microsoft/VibeVoice
 # pip install /path/to/VibeVoice
 vibevoice
+accelerate
+diffusers
+ml-collections
 
 # Speech Emotion Recognition & Transformers
 transformers>=4.30.0
-accelerate
 soundfile
 
 # Utilities
