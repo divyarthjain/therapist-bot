@@ -1,7 +1,7 @@
 // ── WebSocket Messages ───────────────────────────────────────────────────────
 
-export type WSOutgoingType = 'init' | 'message' | 'emotion'
-export type WSIncomingType = 'session' | 'emotion_summary' | 'response' | 'error'
+export type WSOutgoingType = 'init' | 'message' | 'emotion' | 'voice_message'
+export type WSIncomingType = 'session' | 'emotion_summary' | 'response' | 'error' | 'voice_response'
 
 export interface WSInitMessage {
   type: 'init'
@@ -21,7 +21,13 @@ export interface WSEmotionMessage {
   confidence: number
 }
 
-export type WSOutgoing = WSInitMessage | WSChatMessage | WSEmotionMessage
+export interface WSVoiceMessage {
+  type: 'voice_message'
+  audio: string // base64-encoded WAV audio
+  session_id?: string
+}
+
+export type WSOutgoing = WSInitMessage | WSChatMessage | WSEmotionMessage | WSVoiceMessage
 
 export interface WSSessionResponse {
   type: 'session'
@@ -44,11 +50,27 @@ export interface WSErrorResponse {
   message: string
 }
 
+export interface WSVoiceResponse {
+  type: 'voice_response'
+  response_text: string
+  emotion_tags: string
+  target_emotion: string
+  audio_base64: string | null
+  timings: Record<string, number>
+  transcription: string
+  done: boolean
+}
+
 export type WSIncoming =
   | WSSessionResponse
   | WSEmotionSummaryResponse
   | WSResponseChunk
   | WSErrorResponse
+  | WSVoiceResponse
+
+// ── Voice Call ───────────────────────────────────────────────────────────────
+
+export type CallState = 'idle' | 'listening' | 'processing' | 'speaking'
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
 
