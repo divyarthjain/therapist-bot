@@ -38,7 +38,5 @@ export default defineConfig({
       },
     },
   },
-  optimizeDeps: {
-    exclude: ['onnxruntime-web'],
-  },
+
 })

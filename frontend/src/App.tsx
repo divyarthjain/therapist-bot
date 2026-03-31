@@ -1,13 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Navigation } from './components/Navigation'
+import type { ViewState } from './components/Navigation'
+import { HomeView } from './components/views/HomeView'
+import { AudioUploadView } from './components/views/AudioUploadView'
+import { EmotionResultView } from './components/views/EmotionResultView'
+import { ChatView } from './components/views/ChatView'
+import { ProfileView } from './components/views/ProfileView'
+import { AuthView } from './components/views/AuthView'
+import { WebcamEmotion } from './components/WebcamEmotion'
+
+import { useAuth } from './hooks/useAuth'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useVoiceCall } from './hooks/useVoiceCall'
-import { ChatPanel } from './components/ChatPanel'
-import { AudioRecorder } from './components/AudioRecorder'
-import { CallButton } from './components/CallButton'
-import { WebcamEmotion } from './components/WebcamEmotion'
-import { TherapistVisual } from './components/TherapistVisual'
+import type { AudioAnalysisResult } from './types'
 
 function App() {
+  const { user, loading } = useAuth()
+  const [currentView, setCurrentView] = useState<ViewState>('home')
+  const [audioResult, setAudioResult] = useState<AudioAnalysisResult | null>(null)
+
+  // Global hooks that persist connection across views
   const {
     isConnected,
     sessionId,
@@ -25,25 +37,7 @@ function App() {
     onSpeechEnd: sendVoiceMessage,
   })
 
-  // State
-  const [pendingTranscription, setPendingTranscription] = useState<string | null>(null)
-  const [input, setInput] = useState('')
-  const [isCameraActive, setIsCameraActive] = useState(true)
-
-  // Refs
-  const audioEmotionRef = useRef<string | undefined>(undefined)
-  const videoEmotionRef = useRef<string | undefined>(undefined)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-
-  // Effect: Handle pending transcription
-  useEffect(() => {
-    if (pendingTranscription) {
-      setInput(pendingTranscription)
-      setPendingTranscription(null)
-      inputRef.current?.focus()
-    }
-  }, [pendingTranscription])
-
+  // Voice playback logic (from original app)
   useEffect(() => {
     if (!isCallActive || !lastVoiceResponse) return
 
@@ -67,128 +61,70 @@ function App() {
     }
   }, [isCallActive, callState, error, setCallState])
 
-  // Handlers
-  const handleSendClick = useCallback(() => {
-    const trimmed = input.trim()
-    if (!trimmed || isStreaming || !isConnected) return
-
-    sendMessage(trimmed, audioEmotionRef.current, videoEmotionRef.current)
-    audioEmotionRef.current = undefined
-    setInput('')
-  }, [input, isStreaming, isConnected, sendMessage])
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSendClick()
+  // View routing rendering
+  const renderView = () => {
+    switch (currentView) {
+      case 'home':
+        return <HomeView onNavigate={setCurrentView} />
+      case 'audio':
+        return (
+          <AudioUploadView 
+            sessionId={sessionId} 
+            onAnalysisResult={setAudioResult} 
+            onNavigate={setCurrentView} 
+          />
+        )
+      case 'result':
+        return <EmotionResultView result={audioResult} onNavigate={setCurrentView} />
+      case 'chat':
+        return (
+          <ChatView 
+            messages={messages}
+            isConnected={isConnected}
+            isStreaming={isStreaming}
+            isCallActive={isCallActive}
+            onSendMessage={sendMessage}
+            onToggleCall={toggleCall}
+          />
+        )
+      case 'profile':
+        return <ProfileView />
+      default:
+        return <HomeView onNavigate={setCurrentView} />
     }
   }
 
-  const handleAudioEmotion = useCallback((emotion: string) => {
-    audioEmotionRef.current = emotion
-  }, [])
+  // If auth is still loading the session
+  if (loading) {
+     return <div className="app-container flex-center">Loading Serenity...</div>
+  }
 
-  const handleVideoEmotion = useCallback(
-    (emotion: string, confidence: number) => {
-      videoEmotionRef.current = emotion
-      sendEmotion(emotion, confidence)
-    },
-    [sendEmotion],
-  )
-
-  const handleTranscription = useCallback((text: string) => {
-    setPendingTranscription(text)
-  }, [])
+  // Restrict access if no logged in user
+  if (!user) {
+     return (
+       <div className="app-container">
+         <main className="view-content" style={{ padding: 0 }}>
+           <AuthView />
+         </main>
+       </div>
+     )
+  }
 
   return (
-    <div className="app">
-      {/* Top Bar */}
-      <div className="app__top-bar">
-        <div className="app__top-bar-left">
-          <span className="app__logo">🧠</span>
-          <span className="app__title">Serenity</span>
-          <div 
-            className={`app__connection-dot ${isConnected ? 'app__connection-dot--connected' : ''}`} 
-            title={isConnected ? 'Connected' : 'Disconnected'}
-          />
-        </div>
-        <div className="app__top-bar-right">
-          {/* Optional: Session timer or other indicators could go here */}
-        </div>
+    <div className="app-container">
+      {/* Container for the Active View */}
+      <main className="view-content">
+        {renderView()}
+      </main>
+      
+      {/* Fixed Bottom Navigation */}
+      <Navigation currentView={currentView} onNavigate={setCurrentView} />
+
+      {/* Global Video PIP */}
+      <div className="global-pip" style={{ position: 'absolute', top: '16px', right: '16px', width: '80px', height: '80px', borderRadius: '12px', overflow: 'hidden', zIndex: 50,boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+         <WebcamEmotion isActive={true} onEmotionDetected={sendEmotion} />
       </div>
 
-      {error && <div className="app__error">{error}</div>}
-
-      {/* Main Stage */}
-      <div className="app__stage">
-        {/* Therapist Visual */}
-         <TherapistVisual isStreaming={isStreaming} callState={callState} />
-
-        {/* User PIP */}
-        <div className="app__pip">
-          <WebcamEmotion 
-            isActive={isCameraActive}
-            onEmotionDetected={handleVideoEmotion} 
-          />
-        </div>
-
-        {/* Chat Overlay */}
-         <div className="app__chat-overlay">
-           <ChatPanel
-             messages={messages}
-             isStreaming={isStreaming}
-             isConnected={isConnected}
-           />
-         </div>
-       </div>
-
-      {/* Bottom Control Bar */}
-      <div className="app__bottom-bar">
-        <CallButton callState={callState} onToggle={toggleCall} />
-
-        {!isCallActive && (
-          <AudioRecorder
-            sessionId={sessionId}
-            onTranscription={handleTranscription}
-            onAudioEmotion={handleAudioEmotion}
-          />
-        )}
-
-        <button 
-          className="control-btn"
-          onClick={() => setIsCameraActive(!isCameraActive)}
-          title={isCameraActive ? "Turn camera off" : "Turn camera on"}
-          style={{ 
-            background: isCameraActive ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 92, 92, 0.2)',
-            borderColor: isCameraActive ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 92, 92, 0.4)'
-          }}
-        >
-          {isCameraActive ? '📷' : '🚫'}
-        </button>
-
-        <textarea
-          ref={inputRef}
-          className="chat-input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={isConnected ? 'Type your message…' : 'Connecting…'}
-          disabled={!isConnected}
-          rows={1}
-        />
-
-        <button
-          className="send-btn"
-          onClick={handleSendClick}
-          disabled={!input.trim() || isStreaming || !isConnected}
-          title="Send message"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13" />
-            <polygon points="22 2 15 22 11 13 2 9 22 2" />
-          </svg>
-        </button>
-      </div>
     </div>
   )
 }

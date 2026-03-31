@@ -1,0 +1,35 @@
+.home-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.home-header {
+  margin-top: 16px;
+  margin-bottom: 24px;
+}
+
+.home-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.insight-icons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 0;
+}
+
+.insight-pulse {
+  font-size: 40px;
+  width: 80px;
+  height: 80px;
+  background-color: var(--color-primary-light);
+  border-radius: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(168, 213, 186, 0.4);
+}
