@@ -4,54 +4,68 @@ import './HomeView.css'
 
 interface Props {
   onNavigate: (view: ViewState) => void
+  onStartCall: () => void
+  isCallActive: boolean
   emotionSummary?: EmotionState | null
 }
 
-export function HomeView({ onNavigate, emotionSummary }: Props) {
-  // Mock a simple message based on emotion
-  const getDailyMessage = () => {
+export function HomeView({ onNavigate, onStartCall, isCallActive, emotionSummary }: Props) {
+  const getLivePrompt = () => {
     if (!emotionSummary || emotionSummary.dominant === 'neutral') {
-       return "How are you feeling today?"
+      return 'Start speaking naturally. The therapist will listen, transcribe, and respond out loud.'
     }
+
     const moodMap: Record<string, string> = {
-      happy: "You seem happy today! 😊",
-      sad: "Take it easy today. I'm here to listen. 💙",
-      angry: "It's okay to feel frustrated. Take a deep breath. 🌿",
-      fearful: "You are safe here. Let's talk about it. 🌸",
-      disgusted: "Something bothering you? Let's unpack it. 🤔",
-      surprised: "Feeling surprised? What's on your mind? 😲",
-      calm: "You seem calm today. Keep it up! 🍃"
+      happy: 'You sound steady and upbeat. We can build on that energy.',
+      sad: 'You seem low right now. The live therapist is ready to slow down and listen.',
+      angry: 'There is tension coming through. We can work through it in real time.',
+      fearful: 'You seem anxious. The call flow is set up to respond gently and quickly.',
+      disgusted: 'Something feels off. We can unpack it together live.',
+      surprised: 'Something shifted. We can talk through it right away.',
+      calm: 'You seem calm. This is a good moment to check in deeply.',
     }
-    return moodMap[emotionSummary.dominant] || "How are you feeling today?"
+
+    return moodMap[emotionSummary.dominant] || 'Start speaking naturally. The therapist is ready.'
   }
 
   return (
     <div className="home-view">
       <div className="home-header">
-        <h1 className="title-large">Hi, Welcome back!</h1>
-        <p className="text-body">Your AI Therapist companion is ready to listen.</p>
+        <h1 className="title-large">Live Therapist</h1>
+        <p className="text-body">Voice-first therapy with live listening, live speaking, and emotion-aware responses.</p>
       </div>
 
-      <div className="card card--gradient">
-        <h2 className="title-medium">Daily Check-in</h2>
-        <p className="text-body" style={{ color: '#5C4A82', marginBottom: '16px' }}>
-          {getDailyMessage()}
+      <div className="card home-hero">
+        <div className="home-hero__status">
+          <span className={`home-hero__status-dot ${isCallActive ? 'active' : ''}`} />
+          <span>{isCallActive ? 'Live call ready' : 'Standby'}</span>
+        </div>
+
+        <h2 className="title-medium">ChatGPT-style voice session</h2>
+        <p className="text-body home-hero__copy">
+          {getLivePrompt()}
         </p>
+
         <div className="home-actions">
-           <button className="btn-primary" onClick={() => onNavigate('audio')}>
-              🎙️ Voice Journal
-           </button>
-           <button className="btn-secondary mt-2" onClick={() => onNavigate('chat')}>
-              💬 Start Chat
-           </button>
+          <button className="btn-primary" onClick={onStartCall}>
+            {isCallActive ? 'Return To Live Call' : 'Start Live Call'}
+          </button>
+          <button className="btn-secondary" onClick={() => onNavigate('chat')}>
+            Open Therapist Chat
+          </button>
         </div>
       </div>
 
-      <div className="card">
-        <h3 className="title-medium" style={{ fontSize: '18px' }}>Recent Insights</h3>
-        <p className="text-body">You've had 3 sessions this week. Your average mood has been <strong style={{color: 'var(--color-primary-dark)'}}>Calm</strong>.</p>
-        <div className="insight-icons">
-          <div className="insight-pulse animate-pulse-soft">🌿</div>
+      <div className="card home-stack">
+        <h3 className="title-medium" style={{ fontSize: '18px' }}>Voice stack</h3>
+        <p className="text-body">
+          Live microphone capture feeds STT, emotion analysis, Gemini therapist reasoning, and spoken reply playback in one loop.
+        </p>
+        <div className="home-stack__chips">
+          <span className="home-stack__chip">Live STT</span>
+          <span className="home-stack__chip">Emotion Fusion</span>
+          <span className="home-stack__chip">Therapist LLM</span>
+          <span className="home-stack__chip">Realtime TTS</span>
         </div>
       </div>
     </div>

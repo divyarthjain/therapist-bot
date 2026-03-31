@@ -107,6 +107,7 @@ class AudioAnalyzer:
                 model="iic/SenseVoiceSmall",
                 trust_remote_code=True,
                 device=self.device,
+                disable_update=True,
                 # Disable VAD for short clips (<30s), enable for longer
                 vad_model="fsmn-vad",
                 vad_kwargs={"max_single_segment_time": 30000},

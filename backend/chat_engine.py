@@ -1,24 +1,26 @@
 """
-Ollama Chat Engine — Therapeutic conversation with emotion awareness.
-Uses gemma3:4b-it-q8_0 via Ollama for local, private LLM inference.
-
-Features:
-- Emotion-aware system prompt that adapts based on detected emotions
-- Streaming responses via async generator
-- Conversation history management
-- Safety boundaries (crisis detection, appropriate referrals)
+Gemini Chat Engine — Therapeutic conversation with emotion awareness.
+Uses the Gemini API with a strong system instruction for empathetic responses.
 """
 
+import json
 import logging
+import os
 import re
-from typing import AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional
 
-from ollama import AsyncClient
+import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_MODEL = "gemma3:4b-it-q8_0"
-OLLAMA_HOST = "http://localhost:11434"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_API_BASE = os.getenv(
+    "GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta"
+)
 
 # ── Therapeutic System Prompt ─────────────────────────────────────────────────
 
@@ -76,17 +78,27 @@ Choose the emotion that best matches the therapeutic tone of your response."""
 
 
 def build_emotion_context(
-    fused_emotion: Optional[dict] = None, tagged_text: Optional[str] = None
+    fused_emotion: Optional[dict] = None,
+    tagged_text: Optional[str] = None,
+    mood_context: Optional[str] = None,
 ) -> str:
     """Build an emotion context addendum for the system prompt."""
-    if not fused_emotion and not tagged_text:
+    if not fused_emotion and not tagged_text and not mood_context:
         return ""
 
     parts = []
 
     if tagged_text:
-        parts.append(f"\n\n## Word-Level Emotion Tags (from user's speech)")
+        parts.append("\n\n## Word-Level Emotion Tags (from user's speech)")
         parts.append(f"The user said: {tagged_text}")
+
+    if mood_context:
+        parts.append("\n\n## Recent Mood Timeline (internal therapist context)")
+        parts.append(
+            "Use this only as quiet context for emotional continuity. Do not mention "
+            "an internal log, hidden file, or tracking mechanism unless the user asks directly."
+        )
+        parts.append(mood_context)
 
     if fused_emotion:
         audio_emo = fused_emotion.get("audio", {})
@@ -94,7 +106,7 @@ def build_emotion_context(
         dominant = fused_emotion.get("dominant", "neutral")
         confidence = fused_emotion.get("confidence", 0.0)
 
-        parts.append(f"\n\n## Current Emotional State (Detected)")
+        parts.append("\n\n## Current Emotional State (Detected)")
         parts.append(
             f"- **Dominant emotion**: {dominant} (confidence: {confidence:.0%})"
         )
@@ -105,7 +117,6 @@ def build_emotion_context(
         if video_emo.get("emotion") and video_emo["emotion"] != "neutral":
             parts.append(f"- **Facial expression**: {video_emo['emotion']}")
 
-        # Detect emotional incongruence (saying one thing, showing another)
         if (
             audio_emo.get("emotion")
             and video_emo.get("emotion")
@@ -114,12 +125,11 @@ def build_emotion_context(
             and video_emo["emotion"] != "neutral"
         ):
             parts.append(
-                f"- ⚠️ **Incongruence detected**: Voice suggests '{audio_emo['emotion']}' "
+                f"- **Incongruence detected**: Voice suggests '{audio_emo['emotion']}' "
                 f"but facial expression shows '{video_emo['emotion']}'. "
                 f"Gently explore this if appropriate."
             )
 
-        # Guidance based on specific emotions
         if dominant in ("sad", "fearful"):
             parts.append(
                 "- Approach with extra gentleness and warmth. Prioritize validation."
@@ -139,12 +149,8 @@ def build_emotion_context(
 
 
 def parse_llm_response(response: str) -> tuple[str, str]:
-    """Extract target emotion and clean text from LLM response.
-
-    LLM is instructed to start responses with: [Target Emotion: empathetic]
-    Returns (target_emotion, clean_text). If no tag found, returns ("neutral", original_text).
-    """
-    pattern = r"^\[Target Emotion:\s*(\w+)\]\s*"
+    """Extract target emotion and clean text from LLM response."""
+    pattern = r"^\s*\[Target Emotion:\s*([\w-]+)\]\s*"
     match = re.search(pattern, response, re.IGNORECASE)
 
     if match:
@@ -152,96 +158,182 @@ def parse_llm_response(response: str) -> tuple[str, str]:
         clean_text = response[match.end() :].strip()
         return target_emotion, clean_text
 
-    return "neutral", response
+    return "neutral", response.strip()
+
+
+def extract_text_from_candidate(payload: dict[str, Any]) -> str:
+    """Read text from Gemini candidate payload."""
+    parts = payload.get("content", {}).get("parts", [])
+    text_parts = [part.get("text", "") for part in parts if part.get("text")]
+    return "".join(text_parts)
 
 
 class ChatEngine:
-    """Async Ollama chat engine with therapeutic persona and emotion awareness."""
+    """Gemini chat engine with therapeutic persona and emotion awareness."""
 
-    def __init__(self, model: str = OLLAMA_MODEL, host: str = OLLAMA_HOST):
+    def __init__(
+        self,
+        model: str = GEMINI_MODEL,
+        api_key: Optional[str] = GEMINI_API_KEY,
+        api_base: str = GEMINI_API_BASE,
+    ):
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is not configured")
+
         self.model = model
-        self.client = AsyncClient(host=host)
-        logger.info(f"Chat engine initialized with model: {model}")
+        self.api_key = api_key
+        self.api_base = api_base.rstrip("/")
+        self.client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=30.0),
+            headers={
+                "x-goog-api-key": self.api_key,
+                "Content-Type": "application/json",
+            },
+        )
+        logger.info("Chat engine initialized with Gemini model: %s", model)
 
-    def _build_messages(
+    def _build_contents(
         self,
         messages: list[dict],
         fused_emotion: Optional[dict] = None,
         tagged_text: Optional[str] = None,
+        mood_context: Optional[str] = None,
     ) -> list[dict]:
-        """Build the full message list with system prompt + emotion context."""
-        system_prompt = BASE_SYSTEM_PROMPT + build_emotion_context(
-            fused_emotion, tagged_text
-        )
-
-        full_messages = [{"role": "system", "content": system_prompt}]
-
-        # Include conversation history (keep last 20 messages to fit context)
         history = messages[-20:] if len(messages) > 20 else messages
+        contents: list[dict] = []
 
-        # If tagged_text is provided, enhance the last user message
-        if tagged_text and history and history[-1]["role"] == "user":
-            history = history[:-1] + [
-                {
-                    "role": "user",
-                    "content": f"[Transcribed with emotions]: {tagged_text}\n\n{history[-1]['content']}",
-                }
-            ]
+        for index, message in enumerate(history):
+            role = "model" if message["role"] == "assistant" else "user"
+            content = message["content"]
 
-        full_messages.extend(history)
+            if tagged_text and index == len(history) - 1 and role == "user":
+                content = (
+                    f"[Transcribed with emotions]: {tagged_text}\n\n"
+                    f"{message['content']}"
+                )
 
-        return full_messages
+            contents.append({"role": role, "parts": [{"text": content}]})
+
+        return contents
+
+    def _build_payload(
+        self,
+        messages: list[dict],
+        fused_emotion: Optional[dict] = None,
+        tagged_text: Optional[str] = None,
+        mood_context: Optional[str] = None,
+    ) -> dict[str, Any]:
+        system_prompt = BASE_SYSTEM_PROMPT + build_emotion_context(
+            fused_emotion, tagged_text, mood_context
+        )
+        return {
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": self._build_contents(messages, fused_emotion, tagged_text),
+            "generationConfig": {
+                "temperature": 0.7,
+                "topP": 0.9,
+                "topK": 40,
+                "maxOutputTokens": 1024,
+                "responseMimeType": "text/plain",
+            },
+        }
 
     async def chat(
         self,
         messages: list[dict],
         fused_emotion: Optional[dict] = None,
         tagged_text: Optional[str] = None,
+        mood_context: Optional[str] = None,
     ) -> str:
-        """Non-streaming chat. Returns full response text."""
-        full_messages = self._build_messages(messages, fused_emotion, tagged_text)
+        payload = self._build_payload(messages, fused_emotion, tagged_text, mood_context)
+        url = f"{self.api_base}/models/{self.model}:generateContent"
 
         try:
-            response = await self.client.chat(
-                model=self.model,
-                messages=full_messages,
-                stream=False,
-                options={
-                    "temperature": 0.7,
-                    "top_p": 0.9,
-                    "num_predict": 1024,
-                },
+            response = await self.client.post(url, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            candidates = data.get("candidates", [])
+            if not candidates:
+                raise ValueError("Gemini returned no candidates")
+            return extract_text_from_candidate(candidates[0])
+        except Exception as exc:
+            logger.error("Gemini chat error: %s", exc)
+            return (
+                "I'm having trouble reaching the Gemini therapist engine right now. "
+                "Please verify GEMINI_API_KEY and GEMINI_MODEL, then try again."
             )
-            return response["message"]["content"]
-        except Exception as e:
-            logger.error(f"Ollama chat error: {e}")
-            return f"I'm having trouble connecting to my thinking engine right now. Please make sure Ollama is running (`ollama serve`). Error: {str(e)}"
 
     async def chat_stream(
         self,
         messages: list[dict],
         fused_emotion: Optional[dict] = None,
         tagged_text: Optional[str] = None,
+        mood_context: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
-        """Streaming chat. Yields individual tokens."""
-        full_messages = self._build_messages(messages, fused_emotion, tagged_text)
+        payload = self._build_payload(messages, fused_emotion, tagged_text, mood_context)
+        url = f"{self.api_base}/models/{self.model}:streamGenerateContent?alt=sse"
+        prefix_buffer = ""
+        tag_consumed = False
 
         try:
-            stream = await self.client.chat(
-                model=self.model,
-                messages=full_messages,
-                stream=True,
-                options={
-                    "temperature": 0.7,
-                    "top_p": 0.9,
-                    "num_predict": 1024,
-                },
-            )
-            async for chunk in stream:
-                content = chunk.get("message", {}).get("content", "")
-                if content:
-                    yield content
+            async with self.client.stream("POST", url, json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
 
-        except Exception as e:
-            logger.error(f"Ollama stream error: {e}")
-            yield f"Connection error: {str(e)}. Please ensure Ollama is running."
+                    raw_data = line[6:].strip()
+                    if raw_data == "[DONE]":
+                        break
+
+                    try:
+                        data = json.loads(raw_data)
+                    except json.JSONDecodeError:
+                        logger.debug("Skipping non-JSON SSE chunk: %s", raw_data)
+                        continue
+
+                    candidates = data.get("candidates", [])
+                    if not candidates:
+                        continue
+
+                    chunk_text = extract_text_from_candidate(candidates[0])
+                    if not chunk_text:
+                        continue
+
+                    if tag_consumed:
+                        yield chunk_text
+                        continue
+
+                    prefix_buffer += chunk_text
+                    match = re.match(
+                        r"^\s*\[Target Emotion:\s*([\w-]+)\]\s*",
+                        prefix_buffer,
+                        re.IGNORECASE,
+                    )
+
+                    if match:
+                        tag_consumed = True
+                        clean_prefix = prefix_buffer[match.end() :].strip()
+                        if clean_prefix:
+                            yield clean_prefix
+                        prefix_buffer = ""
+                        continue
+
+                    if len(prefix_buffer) > 80 or ("\n" in prefix_buffer and "[Target Emotion:" not in prefix_buffer):
+                        tag_consumed = True
+                        if prefix_buffer:
+                            yield prefix_buffer
+                        prefix_buffer = ""
+
+            if prefix_buffer:
+                yield prefix_buffer
+
+        except Exception as exc:
+            logger.error("Gemini stream error: %s", exc)
+            yield (
+                "I hit a connection issue while speaking. "
+                "Please verify the Gemini API configuration and try again."
+            )
+
+    async def close(self) -> None:
+        await self.client.aclose()

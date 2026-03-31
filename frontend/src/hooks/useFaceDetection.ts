@@ -23,6 +23,7 @@ export function useFaceDetection() {
 
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const detectInFlightRef = useRef(false)
 
   // Load models once
   useEffect(() => {
@@ -42,45 +43,70 @@ export function useFaceDetection() {
 
   const detect = useCallback(async () => {
     const video = videoRef.current
-    if (!video || video.readyState < 2) return
+    if (!video || video.readyState < 2 || detectInFlightRef.current) return
 
-    const result = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-      .withFaceExpressions()
+    detectInFlightRef.current = true
 
-    if (result) {
-      const expr = result.expressions as unknown as FaceExpressions
-      setExpressions(expr)
+    try {
+      const result = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceExpressions()
 
-      // Find dominant emotion
-      let maxKey = 'neutral'
-      let maxVal = 0
-      for (const [key, val] of Object.entries(expr)) {
-        if (val > maxVal) {
-          maxVal = val
-          maxKey = key
+      if (result) {
+        const expr = result.expressions as unknown as FaceExpressions
+        setExpressions(expr)
+
+        let maxKey = 'neutral'
+        let maxVal = 0
+        for (const [key, val] of Object.entries(expr)) {
+          if (val > maxVal) {
+            maxVal = val
+            maxKey = key
+          }
         }
+        setCurrentEmotion(maxKey)
+        setConfidence(maxVal)
+        return
       }
-      setCurrentEmotion(maxKey)
-      setConfidence(maxVal)
+      setExpressions(null)
+      setCurrentEmotion('neutral')
+      setConfidence(0)
+    } finally {
+      detectInFlightRef.current = false
     }
   }, [])
 
+  const beginDetectionLoop = useCallback(() => {
+    clearInterval(intervalRef.current)
+    setIsDetecting(true)
+    void detect()
+    intervalRef.current = setInterval(() => {
+      void detect()
+    }, DETECTION_INTERVAL_MS)
+  }, [detect])
+
   const startDetection = useCallback(
     (video: HTMLVideoElement) => {
-      if (!isModelLoaded) return
       videoRef.current = video
-      setIsDetecting(true)
-      intervalRef.current = setInterval(detect, DETECTION_INTERVAL_MS)
+      if (!isModelLoaded) return
+      beginDetectionLoop()
     },
-    [isModelLoaded, detect],
+    [beginDetectionLoop, isModelLoaded],
   )
 
   const stopDetection = useCallback(() => {
     clearInterval(intervalRef.current)
+    intervalRef.current = undefined
+    detectInFlightRef.current = false
     setIsDetecting(false)
     videoRef.current = null
   }, [])
+
+  useEffect(() => {
+    if (isModelLoaded && videoRef.current && !intervalRef.current) {
+      beginDetectionLoop()
+    }
+  }, [beginDetectionLoop, isModelLoaded])
 
   // Cleanup on unmount
   useEffect(() => {

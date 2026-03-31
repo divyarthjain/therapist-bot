@@ -35,32 +35,6 @@
   opacity: 0.5;
 }
 
-.webcam-emotion__overlay {
-  position: absolute;
-  bottom: 0px;
-  left: 0px;
-  right: 0px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(4px);
-  padding: 4px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 0.75rem;
-  color: var(--color-text);
-}
-
-.webcam-emotion__detected {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 500;
-}
-
-.webcam-emotion__confidence {
-  display: none; /* Hide confidence to keep it clean */
-}
-
 .webcam-emotion__loading {
   position: absolute;
   top: 0;

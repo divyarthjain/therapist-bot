@@ -70,6 +70,16 @@ export function AuthView() {
           </div>
         )}
 
+        {isDummyConfig && (
+          <button
+            type="button"
+            className="btn-primary auth-local-btn"
+            onClick={dummyLogin}
+          >
+            Enter Therapist Bot
+          </button>
+        )}
+
         <form onSubmit={handleAuth} className="auth-form">
           <input 
             type="email" 
@@ -77,7 +87,7 @@ export function AuthView() {
             value={email}
             onChange={e => setEmail(e.target.value)}
             className="auth-input"
-            required 
+            required={!isDummyConfig}
           />
           <input 
             type="password" 
@@ -85,7 +95,7 @@ export function AuthView() {
             value={password}
             onChange={e => setPassword(e.target.value)}
             className="auth-input"
-            required 
+            required={!isDummyConfig}
           />
           
           <button type="submit" className="btn-primary mt-2" disabled={loading}>
@@ -93,14 +103,18 @@ export function AuthView() {
           </button>
         </form>
 
-        <div className="auth-divider">
-           <span>OR</span>
-        </div>
+        {!isDummyConfig && (
+          <div className="auth-divider">
+            <span>OR</span>
+          </div>
+        )}
 
-        <button className="btn-secondary auth-github-btn" onClick={handleGithubAuth} disabled={loading}>
-           <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub" width="20" height="20" style={{ filter: 'invert(100%)' }} />
-           Continue with GitHub
-        </button>
+        {!isDummyConfig && (
+          <button className="btn-secondary auth-github-btn" onClick={handleGithubAuth} disabled={loading}>
+             <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub" width="20" height="20" style={{ filter: 'invert(100%)' }} />
+             Continue with GitHub
+          </button>
+        )}
 
         <p className="text-body mt-4" style={{ fontSize: '13px' }}>
            {isSignUp ? "Already have an account? " : "Don't have an account? "}

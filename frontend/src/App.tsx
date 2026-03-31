@@ -8,6 +8,7 @@ import { ChatView } from './components/views/ChatView'
 import { ProfileView } from './components/views/ProfileView'
 import { AuthView } from './components/views/AuthView'
 import { WebcamEmotion } from './components/WebcamEmotion'
+import { CallOverlay } from './components/CallOverlay'
 
 import { useAuth } from './hooks/useAuth'
 import { useWebSocket } from './hooks/useWebSocket'
@@ -16,7 +17,7 @@ import type { AudioAnalysisResult } from './types'
 
 function App() {
   const { user, loading } = useAuth()
-  const [currentView, setCurrentView] = useState<ViewState>('home')
+  const [currentView, setCurrentView] = useState<ViewState>('chat')
   const [audioResult, setAudioResult] = useState<AudioAnalysisResult | null>(null)
 
   // Global hooks that persist connection across views
@@ -24,6 +25,7 @@ function App() {
     isConnected,
     sessionId,
     messages,
+    emotionState,
     isStreaming,
     error,
     sendMessage,
@@ -61,11 +63,27 @@ function App() {
     }
   }, [isCallActive, callState, error, setCallState])
 
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user')
+  const lastAssistantMessage = [...messages].reverse().find((message) => message.role === 'assistant')
+  const startLiveCall = () => {
+    setCurrentView('chat')
+    if (!isCallActive) {
+      void toggleCall()
+    }
+  }
+
   // View routing rendering
   const renderView = () => {
     switch (currentView) {
       case 'home':
-        return <HomeView onNavigate={setCurrentView} />
+        return (
+          <HomeView
+            onNavigate={setCurrentView}
+            onStartCall={startLiveCall}
+            isCallActive={isCallActive}
+            emotionSummary={emotionState}
+          />
+        )
       case 'audio':
         return (
           <AudioUploadView 
@@ -90,7 +108,14 @@ function App() {
       case 'profile':
         return <ProfileView />
       default:
-        return <HomeView onNavigate={setCurrentView} />
+        return (
+          <HomeView
+            onNavigate={setCurrentView}
+            onStartCall={startLiveCall}
+            isCallActive={isCallActive}
+            emotionSummary={emotionState}
+          />
+        )
     }
   }
 
@@ -114,16 +139,44 @@ function App() {
     <div className="app-container">
       {/* Container for the Active View */}
       <main className="view-content">
+        {error && <div className="error-banner">{error}</div>}
         {renderView()}
       </main>
       
       {/* Fixed Bottom Navigation */}
       <Navigation currentView={currentView} onNavigate={setCurrentView} />
 
-      {/* Global Video PIP */}
-      <div className="global-pip" style={{ position: 'absolute', top: '16px', right: '16px', width: '80px', height: '80px', borderRadius: '12px', overflow: 'hidden', zIndex: 50,boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
-         <WebcamEmotion isActive={true} onEmotionDetected={sendEmotion} />
-      </div>
+      {!isCallActive && (
+        <div
+          className="global-pip"
+          style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            width: '96px',
+            height: '96px',
+            borderRadius: '18px',
+            overflow: 'hidden',
+            zIndex: 50,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+          }}
+        >
+          <WebcamEmotion isActive={true} onEmotionDetected={sendEmotion} />
+        </div>
+      )}
+
+      {isCallActive && (
+        <CallOverlay
+          callState={callState}
+          emotionState={emotionState}
+          isConnected={isConnected}
+          lastUserText={lastUserMessage?.content}
+          lastAssistantText={lastAssistantMessage?.content}
+          onEndCall={toggleCall}
+        >
+          <WebcamEmotion isActive={true} onEmotionDetected={sendEmotion} />
+        </CallOverlay>
+      )}
 
     </div>
   )

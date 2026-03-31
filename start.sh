@@ -2,7 +2,7 @@
 # ─── Therapist Bot Start Script ───────────────────────────────────────────────
 # Starts both backend (FastAPI) and frontend (React+Vite) servers.
 # Prerequisites:
-#   1. Ollama running: ollama serve
+#   1. GEMINI_API_KEY configured in .env or shell
 #   2. Python venv with dependencies: pip install -r backend/requirements.txt
 #   3. Node dependencies: cd frontend && npm install
 
@@ -19,20 +19,13 @@ NC='\033[0m'
 echo -e "${GREEN}🧠 Therapist Bot — Starting...${NC}"
 echo ""
 
-# Check Ollama
-if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo -e "${RED}❌ Ollama is not running. Please start it first:${NC}"
-    echo "   ollama serve"
+# Check Gemini key
+if [ -z "${GEMINI_API_KEY:-}" ] && [ ! -f "$SCRIPT_DIR/.env" ]; then
+    echo -e "${RED}❌ GEMINI_API_KEY is not configured.${NC}"
+    echo "   Copy .env.example to .env and set GEMINI_API_KEY"
     exit 1
 fi
-echo -e "${GREEN}✓ Ollama is running${NC}"
-
-# Check gemma3 model
-if ! ollama list 2>/dev/null | grep -q "gemma3"; then
-    echo -e "${YELLOW}⚠ gemma3 model not found. Pulling gemma3:4b...${NC}"
-    ollama pull gemma3:4b-it-q8_0
-fi
-echo -e "${GREEN}✓ Gemma3 model available${NC}"
+echo -e "${GREEN}✓ Gemini configuration found${NC}"
 
 # Start backend
 echo -e "\n${GREEN}Starting backend (FastAPI on :8000)...${NC}"
@@ -40,11 +33,11 @@ cd "$SCRIPT_DIR/backend"
 if [ -d "venv" ]; then
     source venv/bin/activate
 fi
-SENSEVOICE_DEVICE=cpu uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
+uvicorn main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 
 # Start frontend
-echo -e "${GREEN}Starting frontend (Vite on :5173)...${NC}"
+echo -e "${GREEN}Starting frontend (Vite on :5180)...${NC}"
 cd "$SCRIPT_DIR/frontend"
 npm run dev &
 FRONTEND_PID=$!
@@ -52,7 +45,7 @@ FRONTEND_PID=$!
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
 echo -e "${GREEN}  🧠 Therapist Bot is running!${NC}"
-echo -e "${GREEN}  Frontend: http://localhost:5173${NC}"
+echo -e "${GREEN}  Frontend: http://127.0.0.1:5180${NC}"
 echo -e "${GREEN}  Backend:  http://localhost:8000${NC}"
 echo -e "${GREEN}  API Docs: http://localhost:8000/docs${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════${NC}"

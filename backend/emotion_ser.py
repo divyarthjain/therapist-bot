@@ -1,15 +1,12 @@
+from __future__ import annotations
+
 """
 Speech Emotion Recognition (SER) Module
 Using Wav2Vec2 for frame-level emotion analysis.
 """
 
 import os
-import torch
 import logging
-import numpy as np
-import scipy.io.wavfile
-import scipy.signal
-from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
 from typing import List, Dict, Tuple, Optional
 
 logger = logging.getLogger(__name__)
@@ -53,6 +50,8 @@ class SpeechEmotionRecognizer:
             self.device = os.environ["SER_DEVICE"]
         else:
             try:
+                import torch
+
                 self.device = "mps" if torch.backends.mps.is_available() else "cpu"
             except Exception:
                 self.device = "cpu"
@@ -65,6 +64,12 @@ class SpeechEmotionRecognizer:
         self.processor = None
 
         try:
+            import torch
+            from transformers import (
+                AutoFeatureExtractor,
+                AutoModelForAudioClassification,
+            )
+
             self.processor = AutoFeatureExtractor.from_pretrained(self.model_name)
             self.model = AutoModelForAudioClassification.from_pretrained(
                 self.model_name
@@ -92,6 +97,11 @@ class SpeechEmotionRecognizer:
             return []
 
         try:
+            import numpy as np
+            import scipy.io.wavfile
+            import scipy.signal
+            import torch
+
             # Load audio using scipy
             sample_rate, waveform = scipy.io.wavfile.read(audio_path)
 
@@ -190,6 +200,10 @@ class SpeechEmotionRecognizer:
             return []
 
         try:
+            import numpy as np
+            import scipy.signal
+            import torch
+
             # Ensure float32
             if waveform.dtype != np.float32:
                 waveform = waveform.astype(np.float32)

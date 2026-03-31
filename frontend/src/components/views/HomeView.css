@@ -9,27 +9,67 @@
   margin-bottom: 24px;
 }
 
+.home-hero {
+  background:
+    radial-gradient(circle at top right, rgba(168, 213, 186, 0.28), transparent 35%),
+    linear-gradient(135deg, #f4ecff 0%, #f6f7ff 100%);
+}
+
+.home-hero__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #4f4a68;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.home-hero__status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #b9bfd1;
+}
+
+.home-hero__status-dot.active {
+  background: #64c792;
+  box-shadow: 0 0 0 6px rgba(100, 199, 146, 0.16);
+}
+
+.home-hero__copy {
+  color: #60537b;
+  margin-bottom: 18px;
+}
+
 .home-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
-.insight-icons {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 24px 0;
+.home-stack {
+  background: linear-gradient(180deg, #ffffff 0%, #fbf9ff 100%);
 }
 
-.insight-pulse {
-  font-size: 40px;
-  width: 80px;
-  height: 80px;
-  background-color: var(--color-primary-light);
-  border-radius: 40px;
+.home-stack__chips {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.home-stack__chip {
+  display: inline-flex;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 4px 12px rgba(168, 213, 186, 0.4);
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(214, 205, 234, 0.42);
+  color: #564a76;
+  font-size: 13px;
+  font-weight: 600;
 }

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useFaceDetection } from '../hooks/useFaceDetection'
 import './WebcamEmotion.css'
 
+const EMOTION_HEARTBEAT_MS = 1800
+
 interface Props {
   isActive: boolean
   onEmotionDetected: (emotion: string, confidence: number) => void
@@ -19,6 +21,7 @@ export function WebcamEmotion({ isActive, onEmotionDetected }: Props) {
   } = useFaceDetection()
 
   const lastEmotionRef = useRef('')
+  const lastSentAtRef = useRef(0)
   const currentEmotionRef = useRef(currentEmotion)
   const confidenceRef = useRef(confidence)
   const onEmotionDetectedRef = useRef(onEmotionDetected)
@@ -31,11 +34,17 @@ export function WebcamEmotion({ isActive, onEmotionDetected }: Props) {
     onEmotionDetectedRef.current = onEmotionDetected
     startDetectionRef.current = startDetection
     stopDetectionRef.current = stopDetection
-  })
+  }, [confidence, currentEmotion, onEmotionDetected, startDetection, stopDetection])
 
   const checkEmotionChange = useCallback(() => {
-    if (currentEmotionRef.current !== lastEmotionRef.current) {
+    const now = Date.now()
+    const shouldSend =
+      currentEmotionRef.current !== lastEmotionRef.current ||
+      now - lastSentAtRef.current >= EMOTION_HEARTBEAT_MS
+
+    if (shouldSend) {
       lastEmotionRef.current = currentEmotionRef.current
+      lastSentAtRef.current = now
       onEmotionDetectedRef.current(currentEmotionRef.current, confidenceRef.current)
     }
   }, []) // Empty deps — stable forever

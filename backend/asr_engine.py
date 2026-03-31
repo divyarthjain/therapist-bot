@@ -3,13 +3,11 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import List, Optional, Protocol
+from typing import List, Protocol
 
-from audio_analyzer import AudioAnalyzer, parse_sensevoice_tags
+import httpx
 
 logger = logging.getLogger(__name__)
-
-MEMORY_REPORT_PATH = os.path.join(os.path.dirname(__file__), "MEMORY_REPORT.md")
 
 
 @dataclass
@@ -24,95 +22,119 @@ class ASRResult:
     segments: List[WordSegment]
     full_text: str
     language: str
+    detected_emotion: str = "neutral"
+    emotion_confidence: float = 0.0
 
 
 class ASREngine(Protocol):
     def transcribe(self, audio_bytes: bytes, filename: str) -> ASRResult: ...
 
 
-class SenseVoiceASR:
-    def __init__(self, device: Optional[str] = None):
-        if device:
-            self.device = device
-        elif os.environ.get("SENSEVOICE_DEVICE"):
-            self.device = os.environ["SENSEVOICE_DEVICE"]
+class DeepgramASR:
+    BASE_URL = "https://api.deepgram.com/v1/listen"
+
+    def __init__(self) -> None:
+        self.api_key = os.environ.get("DEEPGRAM_API_KEY", "").strip()
+        self.model = os.environ.get("DEEPGRAM_STT_MODEL", "nova-3")
+        self.language = os.environ.get("DEEPGRAM_STT_LANGUAGE", "en")
+        self.timeout_seconds = float(os.environ.get("DEEPGRAM_STT_TIMEOUT_SECONDS", "60"))
+        self._loaded = bool(self.api_key)
+        self.client = httpx.Client(
+            timeout=httpx.Timeout(self.timeout_seconds, connect=10.0)
+        )
+
+        if self._loaded:
+            logger.info("Deepgram ASR initialized with model: %s", self.model)
         else:
-            try:
-                import torch
+            logger.warning("DEEPGRAM_API_KEY is missing; ASR will stay unavailable")
 
-                self.device = "mps" if torch.backends.mps.is_available() else "cpu"
-            except Exception:
-                self.device = "cpu"
+    @staticmethod
+    def _content_type_for(filename: str, audio_bytes: bytes) -> str:
+        lower = (filename or "").lower()
+        if lower.endswith(".wav") or (
+            len(audio_bytes) >= 12 and audio_bytes[:4] == b"RIFF" and audio_bytes[8:12] == b"WAVE"
+        ):
+            return "audio/wav"
+        if lower.endswith(".mp3"):
+            return "audio/mpeg"
+        if lower.endswith(".m4a"):
+            return "audio/mp4"
+        return "application/octet-stream"
 
-        logger.info(f"Initializing SenseVoice ASR on device: {self.device}")
+    @staticmethod
+    def _extract_segments(words_payload: list[dict], transcript: str) -> List[WordSegment]:
+        segments = []
+        for item in words_payload:
+            word = str(item.get("word", "")).strip()
+            if not word:
+                continue
+            start = float(item.get("start", 0.0) or 0.0)
+            end = float(item.get("end", start) or start)
+            segments.append(WordSegment(word=word, start=start, end=end))
 
-        try:
-            self.analyzer = AudioAnalyzer(device=self.device)
-            self._loaded = getattr(self.analyzer, "_loaded", False)
-            if self._loaded:
-                logger.info("SenseVoice model loaded successfully")
-            else:
-                logger.info(
-                    "Audio analysis will use fallback mode (transcription only)"
-                )
-        except Exception as e:
-            logger.error(f"Failed to load SenseVoice: {e}")
-            logger.info("Audio analysis will use fallback mode (transcription only)")
-            self._loaded = False
-            self.analyzer = None
+        if segments:
+            return segments
+
+        words = transcript.split()
+        if not words:
+            return []
+
+        per_word = 0.35
+        return [
+            WordSegment(word=word, start=index * per_word, end=(index + 1) * per_word)
+            for index, word in enumerate(words)
+        ]
+
+    def close(self) -> None:
+        self.client.close()
 
     def transcribe(self, audio_bytes: bytes, filename: str) -> ASRResult:
-        if not self.analyzer:
-            return ASRResult(segments=[], full_text="", language="unknown")
+        if not self._loaded:
+            return ASRResult(segments=[], full_text="", language=self.language)
 
         try:
-            analysis = self.analyzer.analyze(audio_bytes, filename=filename)
-            raw_text = analysis.get("raw_text", "")
-            if raw_text:
-                parsed = parse_sensevoice_tags(raw_text)
-                clean_text = parsed.get("clean_text", "")
-                language = parsed.get("language", "unknown")
-            else:
-                clean_text = analysis.get("transcription", "")
-                language = analysis.get("language", "unknown")
-
-            words = clean_text.split()
-            total_duration = len(audio_bytes) / (16000 * 2)
-            if not words:
-                return ASRResult(segments=[], full_text=clean_text, language=language)
-
-            per_word = total_duration / len(words)
-            segments = [
-                WordSegment(
-                    word=word,
-                    start=i * per_word,
-                    end=(i + 1) * per_word,
-                )
-                for i, word in enumerate(words)
-            ]
-
-            return ASRResult(segments=segments, full_text=clean_text, language=language)
-
-        except Exception as e:
-            logger.error(f"SenseVoice inference error: {e}")
-            return ASRResult(segments=[], full_text="", language="unknown")
-
-
-def _confirm_memory_decision() -> None:
-    try:
-        with open(MEMORY_REPORT_PATH, "r", encoding="utf-8") as handle:
-            report = handle.read()
-        if "Decision: NO-GO" in report:
-            logger.info("Memory report: NO-GO confirmed; using SenseVoice fallback")
-        else:
-            logger.warning(
-                "Memory report missing NO-GO decision; using SenseVoice fallback"
+            response = self.client.post(
+                self.BASE_URL,
+                params={
+                    "model": self.model,
+                    "language": self.language,
+                    "smart_format": "true",
+                    "punctuate": "true",
+                },
+                headers={
+                    "Authorization": f"Token {self.api_key}",
+                    "Content-Type": self._content_type_for(filename, audio_bytes),
+                },
+                content=audio_bytes,
             )
-    except Exception as e:
-        logger.warning(f"Failed to read MEMORY_REPORT.md: {e}")
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as exc:
+            logger.error("Deepgram ASR request failed: %s", exc)
+            return ASRResult(segments=[], full_text="", language=self.language)
+
+        channel = (
+            payload.get("results", {})
+            .get("channels", [{}])[0]
+        )
+        alternative = channel.get("alternatives", [{}])[0]
+        transcript = str(alternative.get("transcript", "")).strip()
+        words_payload = alternative.get("words", []) or []
+        detected_language = str(
+            alternative.get("detected_language")
+            or channel.get("detected_language")
+            or self.language
+        )
+
+        return ASRResult(
+            segments=self._extract_segments(words_payload, transcript),
+            full_text=transcript,
+            language=detected_language,
+            detected_emotion="neutral",
+            emotion_confidence=0.0,
+        )
 
 
-def create_asr_engine() -> ASREngine:
-    _confirm_memory_decision()
-    logger.info("ASR engine selected: SenseVoice")
-    return SenseVoiceASR()
+def create_asr_engine(analyzer=None) -> ASREngine:
+    del analyzer
+    return DeepgramASR()
