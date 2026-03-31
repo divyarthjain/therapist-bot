@@ -18,6 +18,8 @@ export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const reconnectDelay = useRef(BASE_RECONNECT_DELAY)
+  const reconnectEnabled = useRef(true)
+  const connectRef = useRef<() => void>(() => undefined)
 
   const [isConnected, setIsConnected] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -120,10 +122,15 @@ export function useWebSocket() {
     ws.onclose = () => {
       setIsConnected(false)
       wsRef.current = null
+      if (!reconnectEnabled.current) {
+        return
+      }
       // Auto-reconnect with exponential backoff
       const delay = reconnectDelay.current
       reconnectDelay.current = Math.min(delay * 2, MAX_RECONNECT_DELAY)
-      reconnectTimer.current = setTimeout(connect, delay)
+      reconnectTimer.current = setTimeout(() => {
+        connectRef.current()
+      }, delay)
     }
 
     ws.onerror = () => {
@@ -132,8 +139,14 @@ export function useWebSocket() {
   }, [])
 
   useEffect(() => {
+    connectRef.current = connect
+  }, [connect])
+
+  useEffect(() => {
+    reconnectEnabled.current = true
     connect()
     return () => {
+      reconnectEnabled.current = false
       clearTimeout(reconnectTimer.current)
       wsRef.current?.close()
     }

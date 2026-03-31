@@ -7,20 +7,20 @@
 
 :root {
   /* Soft Pastel Colors */
-  --bg-page: #F3E8FF; /* Soft lavender for desktop background */
-  --bg-app: #FAFAFA; /* Off-white for the mobile app container */
-  --color-primary: #A8D5BA; /* Mint Green */
+  --bg-page: #F0ECF5;
+  --bg-app: #FAFAFA;
+  --color-primary: #A8D5BA;
   --color-primary-dark: #8BBF9D;
-  --color-accent: #D6CDEA; /* Soft Lavender */
+  --color-accent: #D6CDEA;
   --color-accent-dark: #B9AED0;
-  
-  --color-text: #2D3142; /* Soft dark charcoal */
+
+  --color-text: #2D3142;
   --color-text-muted: #8A8D9F;
   --color-border: #E8E5EE;
-  
+
   --color-card: #FFFFFF;
   --color-error: #FF9B9B;
-  
+
   /* Emotion Colors (Pastel versions) */
   --color-happy: #FFF3CD;
   --color-sad: #D2E3FC;
@@ -32,6 +32,9 @@
 
   /* Typography */
   --font-family: 'Poppins', sans-serif;
+
+  /* Layout */
+  --nav-height: 64px;
 }
 
 body {
@@ -42,13 +45,13 @@ body {
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
 #root {
   width: 100%;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -61,53 +64,71 @@ p {
   margin-top: 0;
 }
 
-/* ── Mobile Container ──────────────────────────────────────────────────────── */
+/* ── App Container ─────────────────────────────────────────────────────────── */
 
 .app-container {
   width: 100%;
-  max-width: 480px;
+  max-width: 900px;
   height: 100vh;
-  max-height: 100vh;
-  margin: 0 auto;
   background-color: var(--bg-app);
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
 }
 
-@media (min-width: 481px) {
+@media (min-width: 960px) {
   .app-container {
-    height: 90vh;
-    max-height: 850px;
-    border-radius: 32px;
-    border: 8px solid #FFFFFF;
-    box-shadow: 0 20px 60px rgba(100, 80, 120, 0.15);
+    height: 96vh;
+    max-height: 920px;
+    margin-top: 2vh;
+    border-radius: 24px;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 20px 60px rgba(100, 80, 120, 0.12);
   }
 }
+
+/* ── View Content ──────────────────────────────────────────────────────────── */
 
 .view-content {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
-  padding-bottom: 90px; /* Space for bottom nav */
+  padding-bottom: calc(var(--nav-height) + 16px);
   display: flex;
   flex-direction: column;
 }
 
 .view-content::-webkit-scrollbar {
-  display: none; /* Hide scrollbar for a cleaner look */
+  width: 5px;
 }
-.view-content {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+.view-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.view-content::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.08);
+  border-radius: 4px;
+}
+
+/* ── Webcam PIP ────────────────────────────────────────────────────────────── */
+
+.global-pip {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 88px;
+  height: 88px;
+  border-radius: 16px;
+  overflow: hidden;
+  z-index: 40;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+  border: 2px solid var(--color-card);
 }
 
 /* ── Typography Utilities ──────────────────────────────────────────────────── */
 
 .title-large {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   margin-bottom: 8px;
   letter-spacing: -0.5px;
@@ -133,7 +154,7 @@ p {
   color: #1A3C2A;
   border: none;
   border-radius: 20px;
-  padding: 16px 24px;
+  padding: 14px 24px;
   font-size: 16px;
   font-weight: 600;
   font-family: var(--font-family);
@@ -149,7 +170,7 @@ p {
 
 .btn-primary:hover:not(:disabled) {
   background-color: var(--color-primary-dark);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -166,7 +187,7 @@ p {
   color: #392B54;
   border: none;
   border-radius: 20px;
-  padding: 16px 24px;
+  padding: 14px 24px;
   font-size: 16px;
   font-weight: 600;
   font-family: var(--font-family);
@@ -206,11 +227,11 @@ p {
 /* Cards */
 .card {
   background-color: var(--color-card);
-  border-radius: 24px;
+  border-radius: 20px;
   padding: 24px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
   margin-bottom: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .card--gradient {
@@ -257,7 +278,8 @@ p {
   line-height: 1.4;
 }
 
-/* Animated Pulse Effect */
+/* ── Animations ────────────────────────────────────────────────────────────── */
+
 @keyframes pulse-soft {
   0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(168, 213, 186, 0.4); }
   70% { transform: scale(1.02); box-shadow: 0 0 0 15px rgba(168, 213, 186, 0); }
@@ -266,4 +288,10 @@ p {
 
 .animate-pulse-soft {
   animation: pulse-soft 2s infinite;
+}
+
+@keyframes pulse-recording {
+  0% { box-shadow: 0 0 0 0 rgba(255, 155, 155, 0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(255, 155, 155, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 155, 155, 0); }
 }

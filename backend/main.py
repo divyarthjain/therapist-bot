@@ -1,7 +1,7 @@
 """
-Therapist Bot Backend — FastAPI server
-Combines SenseVoice (audio emotion), face-api.js results (video emotion),
-and Gemini (therapeutic chat) into a multimodal therapy assistant.
+Therapist Bot Backend — FastAPI server (API-only mode)
+Uses Deepgram (STT/TTS) and Gemini (chat) APIs.
+No local ML models required.
 """
 
 import base64
@@ -10,26 +10,31 @@ import logging
 import time
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from audio_analyzer import AudioAnalyzer
 from asr_engine import create_asr_engine
 from chat_engine import ChatEngine, parse_llm_response
-from emotion_aligner import WordEmotion, align_emotions, format_tagged_text
+from emotion_aligner import WordEmotion, format_tagged_text
 from emotion_fusion import EmotionFusion
-from emotion_ser import SpeechEmotionRecognizer
 from mood_context import MoodContextStore
 from tts_engine import TTSEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BACKEND_DIR.parent
+FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"
+FRONTEND_INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
+
+load_dotenv(PROJECT_ROOT / ".env")
 
 app = FastAPI(title="Therapist Bot", version="1.0.0")
 
@@ -40,6 +45,8 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:5180",
         "http://127.0.0.1:5180",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -48,15 +55,13 @@ app.add_middleware(
 
 # ── Global State ──────────────────────────────────────────────────────────────
 
-audio_analyzer: Optional[AudioAnalyzer] = None
 chat_engine: Optional[ChatEngine] = None
 emotion_fusion = EmotionFusion()
 asr_engine = None
-ser_engine: Optional[SpeechEmotionRecognizer] = None
 tts_engine: Optional[TTSEngine] = None
 mood_context_store = MoodContextStore()
 
-# Per-session conversation histories: session_id → list of messages
+# Per-session conversation histories: session_id → dict
 sessions: dict[str, dict] = {}
 
 
@@ -84,66 +89,32 @@ def record_mood_context(session_id: Optional[str]) -> None:
     mood_context_store.record_snapshot(session_id, emotion_fusion.get_fused_emotion())
 
 
-def is_engine_loaded(engine) -> bool:
-    if engine is None:
-        return False
-    if hasattr(engine, "is_loaded") and callable(engine.is_loaded):
-        try:
-            return bool(engine.is_loaded())
-        except Exception:
-            return False
-    if hasattr(engine, "_loaded"):
-        return bool(getattr(engine, "_loaded"))
-    analyzer = getattr(engine, "analyzer", None)
-    if analyzer is not None and hasattr(analyzer, "_loaded"):
-        return bool(getattr(analyzer, "_loaded"))
-    return True
-
-
 # ── Startup / Shutdown ────────────────────────────────────────────────────────
 
 
 @app.on_event("startup")
 async def startup():
-    global audio_analyzer, chat_engine, asr_engine, ser_engine, tts_engine
-    try:
-        logger.info("Loading SenseVoice model (this may take 30-60s on first run)...")
-        audio_analyzer = AudioAnalyzer()
-        logger.info("SenseVoice loaded.")
-    except Exception as e:
-        logger.error("Failed to load SenseVoice: %s", e)
-        audio_analyzer = None
+    global chat_engine, asr_engine, tts_engine
 
     try:
         chat_engine = ChatEngine()
-        logger.info("Chat engine ready (Gemini).")
+        logger.info("Chat engine ready (Gemini API).")
     except Exception as e:
-        logger.error("Failed to load chat engine: %s", e)
+        logger.error("Failed to init chat engine: %s", e)
         chat_engine = None
 
     try:
-        logger.info("Loading ASR engine...")
-        asr_engine = create_asr_engine(audio_analyzer)
-        logger.info("ASR engine ready.")
+        asr_engine = create_asr_engine()
+        logger.info("ASR engine ready (Deepgram API).")
     except Exception as e:
-        logger.error("Failed to load ASR engine: %s", e)
+        logger.error("Failed to init ASR engine: %s", e)
         asr_engine = None
 
-    logger.info(
-        "Skipping eager SER load to keep local startup responsive; "
-        "voice emotion falls back to SenseVoice until SER is loaded on demand."
-    )
-    ser_engine = None
-
     try:
-        logger.info("Loading TTS engine...")
         tts_engine = TTSEngine()
-        logger.info(
-            "TTS engine ready (loaded=%s).",
-            tts_engine.is_loaded() if tts_engine else False,
-        )
+        logger.info("TTS engine ready (Deepgram API, loaded=%s).", tts_engine.is_loaded())
     except Exception as e:
-        logger.error("Failed to load TTS: %s", e)
+        logger.error("Failed to init TTS: %s", e)
         tts_engine = None
 
 
@@ -177,37 +148,28 @@ class ChatRequest(BaseModel):
 async def health():
     return {
         "status": "ok",
-        "sensevoice_loaded": is_engine_loaded(audio_analyzer),
         "gemini_ready": chat_engine is not None,
-        "asr_loaded": is_engine_loaded(asr_engine),
-        "ser_loaded": is_engine_loaded(ser_engine),
-        "tts_loaded": is_engine_loaded(tts_engine),
+        "asr_loaded": asr_engine is not None and getattr(asr_engine, "_loaded", False),
+        "tts_loaded": tts_engine is not None and tts_engine.is_loaded(),
     }
 
 
 async def run_voice_pipeline(
     audio_bytes: bytes, filename: str, session_id: str
 ) -> dict:
+    """STT → Chat → TTS pipeline using Deepgram + Gemini APIs."""
     timings = {}
 
+    # 1. Deepgram STT
     t0 = time.time()
     asr_result = asr_engine.transcribe(audio_bytes, filename)
     timings["asr_ms"] = round((time.time() - t0) * 1000)
 
     audio_emotion = asr_result.detected_emotion or "neutral"
-    audio_confidence = float(asr_result.emotion_confidence or 0.0)
-    if is_engine_loaded(audio_analyzer):
-        t0 = time.time()
-        audio_analysis = audio_analyzer.analyze(audio_bytes, filename=filename)
-        timings["audio_emotion_ms"] = round((time.time() - t0) * 1000)
-        audio_emotion = audio_analysis.get("emotion", audio_emotion) or "neutral"
-        audio_confidence = float(audio_analysis.get("confidence", audio_confidence) or audio_confidence)
-
-    if audio_confidence <= 0.0:
-        audio_confidence = 0.6
+    audio_confidence = float(asr_result.emotion_confidence or 0.6)
     emotion_fusion.update_audio(audio_emotion, audio_confidence)
 
-    if not asr_result.segments:
+    if not asr_result.full_text.strip():
         return {
             "response_text": "",
             "emotion_tags": "",
@@ -218,46 +180,23 @@ async def run_voice_pipeline(
             "audio_emotion": audio_emotion,
         }
 
-    word_emotions = []
-    if is_engine_loaded(ser_engine):
-        t0 = time.time()
-        import io
-        import wave
+    # Build simple word-level emotion tags from ASR segments
+    scores = {audio_emotion: audio_confidence}
+    word_emotions = [
+        WordEmotion(
+            word=segment.word,
+            start=segment.start,
+            end=segment.end,
+            emotion=audio_emotion,
+            confidence=audio_confidence,
+            scores=scores,
+        )
+        for segment in asr_result.segments
+    ]
 
-        import numpy as np
-
-        sr = 16000
-        pcm_bytes = audio_bytes
-        try:
-            with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
-                sr = wf.getframerate()
-                pcm_bytes = wf.readframes(wf.getnframes())
-        except wave.Error:
-            pass
-
-        audio_np = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-        emotion_frames = ser_engine.analyze_frames_from_array(audio_np, sr)
-        timings["ser_ms"] = round((time.time() - t0) * 1000)
-        word_emotions = align_emotions(asr_result.segments, emotion_frames)
-    else:
-        timings["ser_ms"] = 0
-        scores = {audio_emotion: audio_confidence}
-        word_emotions = [
-            WordEmotion(
-                word=segment.word,
-                start=segment.start,
-                end=segment.end,
-                emotion=audio_emotion,
-                confidence=audio_confidence,
-                scores=scores,
-            )
-            for segment in asr_result.segments
-        ]
-
-    t0 = time.time()
     tagged_text = format_tagged_text(word_emotions)
-    timings["align_ms"] = round((time.time() - t0) * 1000)
 
+    # 2. Gemini Chat
     t0 = time.time()
     sid = get_or_create_session(session_id)
     sessions[sid]["messages"].append({"role": "user", "content": asr_result.full_text})
@@ -274,6 +213,7 @@ async def run_voice_pipeline(
     sessions[sid]["messages"].append({"role": "assistant", "content": clean_response})
     timings["llm_ms"] = round((time.time() - t0) * 1000)
 
+    # 3. Deepgram TTS
     audio_base64 = None
     if tts_engine and tts_engine.is_loaded():
         t0 = time.time()
@@ -303,28 +243,34 @@ async def analyze_audio(
     file: UploadFile = File(...),
     session_id: Optional[str] = None,
 ):
-    """
-    Upload an audio file → get transcription + emotion + audio events.
-    SenseVoice outputs raw_text with embedded tags like <|HAPPY|>, <|Speech|>, etc.
-    """
-    if audio_analyzer is None:
-        return {"error": "Audio analyzer not loaded yet"}
+    """Upload audio → Deepgram STT → return transcription + basic emotion."""
+    if asr_engine is None:
+        return {"error": "ASR engine not loaded"}
 
     audio_bytes = await file.read()
-    result = audio_analyzer.analyze(audio_bytes, filename=file.filename or "audio.wav")
-
-    # Store emotion in session
+    asr_result = asr_engine.transcribe(audio_bytes, file.filename or "audio.wav")
     sid = get_or_create_session(session_id)
+
+    emotion = asr_result.detected_emotion or "neutral"
+    confidence = float(asr_result.emotion_confidence or 0.6)
+
     sessions[sid]["emotion_history"].append(
         {
             "source": "audio",
-            "emotion": result["emotion"],
-            "confidence": result["confidence"],
+            "emotion": emotion,
+            "confidence": confidence,
             "timestamp": datetime.now().isoformat(),
         }
     )
 
-    return {**result, "session_id": sid}
+    return {
+        "transcription": asr_result.full_text,
+        "emotion": emotion,
+        "confidence": confidence,
+        "events": ["speech"] if asr_result.full_text else [],
+        "language": asr_result.language,
+        "session_id": sid,
+    }
 
 
 @app.post("/api/emotion-update")
@@ -346,13 +292,12 @@ async def emotion_update(data: EmotionUpdate):
 
 @app.post("/api/chat")
 async def chat(data: ChatRequest):
-    """Non-streaming chat endpoint (use WebSocket for streaming)."""
+    """Non-streaming chat endpoint."""
     if chat_engine is None:
         return {"error": "Chat engine not loaded"}
 
     sid = get_or_create_session(data.session_id)
 
-    # Fuse emotions from all sources
     if data.audio_emotion:
         emotion_fusion.update_audio(data.audio_emotion, 0.8)
     if data.video_emotion:
@@ -361,7 +306,6 @@ async def chat(data: ChatRequest):
     fused = emotion_fusion.get_fused_emotion()
     record_mood_context(sid)
 
-    # Add user message to history
     sessions[sid]["messages"].append({"role": "user", "content": data.message})
 
     response = await chat_engine.chat(
@@ -421,7 +365,6 @@ async def websocket_chat(websocket: WebSocket):
                 continue
 
             if msg_type == "emotion":
-                # Video emotion update from face-api.js
                 session_id = get_or_create_session(session_id or data.get("session_id"))
                 emotion_fusion.update_video(
                     data.get("emotion", "neutral"),
@@ -445,7 +388,6 @@ async def websocket_chat(websocket: WebSocket):
                 fused = emotion_fusion.get_fused_emotion()
                 record_mood_context(session_id)
 
-                # Send emotion summary to client
                 await websocket.send_json(
                     {
                         "type": "emotion_summary",
@@ -535,13 +477,31 @@ async def websocket_chat(websocket: WebSocket):
                 )
 
     except WebSocketDisconnect:
-        logger.info(f"Client disconnected (session: {session_id})")
+        logger.info("Client disconnected (session: %s)", session_id)
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        logger.error("WebSocket error: %s", e)
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
         except Exception:
             pass
+
+
+@app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+async def serve_frontend(full_path: str):
+    if full_path.startswith("api") or full_path.startswith("ws"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    if not FRONTEND_INDEX_FILE.exists():
+        raise HTTPException(
+            status_code=503,
+            detail="Frontend build not found. Run `npm run build` in the frontend directory.",
+        )
+
+    requested = (FRONTEND_DIST_DIR / full_path).resolve()
+    if full_path and requested.is_file() and str(requested).startswith(str(FRONTEND_DIST_DIR)):
+        return FileResponse(requested)
+
+    return FileResponse(FRONTEND_INDEX_FILE)
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────

@@ -26,7 +26,7 @@ export function useAudioRecorder() {
 
       recorder.start()
       setIsRecording(true)
-    } catch (_err) {
+    } catch {
       setPermissionDenied(true)
     }
   }, [])

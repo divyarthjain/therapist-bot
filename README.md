@@ -1,6 +1,6 @@
 # Serenity — Multimodal AI Therapeutic Companion
 
-A privacy-first multimodal AI therapist that detects your emotions through **voice** and **facial expressions** in real-time, then adapts its therapeutic responses accordingly. Audio analysis and TTS run locally, while therapeutic reasoning is powered through Gemini with a strong system instruction.
+A privacy-first multimodal AI therapist that detects your emotions through **voice** and **facial expressions** in real-time, then adapts its therapeutic responses accordingly. Audio emotion analysis runs locally, live STT/TTS run through Deepgram, and therapeutic reasoning is powered through Gemini with a strong system instruction.
 
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
@@ -23,10 +23,11 @@ A privacy-first multimodal AI therapist that detects your emotions through **voi
 | Requirement | Version | Notes |
 |-------------|---------|-------|
 | Python | 3.10+ | 3.12 recommended |
-| Node.js | 18+ | For the React frontend |
+| Node.js | 18+ | For the React frontend build |
 | Webcam | — | For facial emotion detection |
 | Microphone | — | For voice emotion analysis |
 | Gemini API key | — | Required for chat generation |
+| Deepgram API key | — | Required for live STT and TTS |
 | RAM | 8GB+ | 16GB+ recommended for SenseVoice + TTS |
 
 ## Quick Start
@@ -38,13 +39,13 @@ git clone https://github.com/divyarthjain/therapist-bot.git
 cd therapist-bot
 ```
 
-### 2. Configure Gemini
+### 2. Configure Gemini + Deepgram
 
 ```bash
 cp .env.example .env
 ```
 
-Then set `GEMINI_API_KEY` in `.env`.
+Then set `GEMINI_API_KEY` and `DEEPGRAM_API_KEY` in `.env`.
 
 ### 3. Set up the backend
 
@@ -64,28 +65,26 @@ cd frontend
 npm install
 ```
 
-### 5. Run everything
+### 5. Run the unified app
 
 ```bash
-# From the project root
 chmod +x start.sh
 ./start.sh
 ```
 
-Or start services individually:
+This builds the React frontend and serves it from FastAPI, so you only need one URL.
+
+Or, if you want to build and run manually:
 
 ```bash
-# Terminal 1 — Backend
-cd backend && source venv/bin/activate
-SENSEVOICE_DEVICE=cpu uvicorn main:app --host 0.0.0.0 --port 8000
-
-# Terminal 2 — Frontend
-cd frontend && npm run dev
+cd frontend && npm run build
+cd ../backend && source venv/bin/activate
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ### 6. Open in browser
 
-Navigate to **http://127.0.0.1:5180**
+Navigate to **http://127.0.0.1:8000**
 
 ## Usage
 
@@ -118,6 +117,9 @@ See the [Architecture Guide](ARCHITECTURE.md) for detailed API contracts.
 | `GEMINI_API_KEY` | — | Gemini API key for therapeutic chat |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model name |
 | `GEMINI_API_BASE` | `https://generativelanguage.googleapis.com/v1beta` | Optional Gemini API base override |
+| `DEEPGRAM_API_KEY` | — | Deepgram API key for live STT + TTS |
+| `DEEPGRAM_STT_MODEL` | `nova-3` | Deepgram transcription model |
+| `DEEPGRAM_TTS_MODEL` | `aura-2-thalia-en` | Deepgram speech model |
 
 ## Tech Stack
 
@@ -127,15 +129,16 @@ See the [Architecture Guide](ARCHITECTURE.md) for detailed API contracts.
 | **Backend** | Python 3.12, FastAPI, Uvicorn |
 | **Audio Analysis** | FunAudioLLM SenseVoice (via FunASR) |
 | **Video Analysis** | face-api.js (@vladmandic/face-api) — runs in-browser |
+| **Live Voice I/O** | Deepgram STT (`nova-3`) + Deepgram TTS (`aura-2-thalia-en`) |
 | **LLM** | Gemini API with system instructions |
-| **Communication** | WebSocket (streaming), REST (audio upload) |
+| **Communication** | FastAPI-served SPA + WebSocket (streaming) + REST |
 | **Emotion Fusion** | Weighted late fusion with exponential time decay |
 
 ## Privacy
 
-- **Audio**: Sent to the local backend for SenseVoice analysis. Never leaves your machine.
+- **Audio**: Sent to the local backend for emotion analysis and forwarded to Deepgram for live transcription/speech synthesis.
 - **Video**: Processed entirely in the browser via face-api.js. No video frames are ever transmitted.
-- **Chat**: Therapeutic chat requests are sent to Gemini. Audio emotion analysis, face analysis, and TTS remain local.
+- **Chat**: Therapeutic chat requests are sent to Gemini.
 - **No telemetry**: Zero analytics, tracking, or data collection of any kind.
 
 ## License

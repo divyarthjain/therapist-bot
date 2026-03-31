@@ -35,7 +35,7 @@ function App() {
     clearLastVoiceResponse,
   } = useWebSocket()
 
-  const { callState, isCallActive, toggleCall, playResponseAndResume, setCallState } = useVoiceCall({
+  const { callState, callError, isCallActive, toggleCall, playResponseAndResume, setCallState } = useVoiceCall({
     onSpeechEnd: sendVoiceMessage,
   })
 
@@ -139,7 +139,7 @@ function App() {
     <div className="app-container">
       {/* Container for the Active View */}
       <main className="view-content">
-        {error && <div className="error-banner">{error}</div>}
+        {(error || callError) && <div className="error-banner">{error ?? callError}</div>}
         {renderView()}
       </main>
       
@@ -147,20 +147,7 @@ function App() {
       <Navigation currentView={currentView} onNavigate={setCurrentView} />
 
       {!isCallActive && (
-        <div
-          className="global-pip"
-          style={{
-            position: 'absolute',
-            top: '16px',
-            right: '16px',
-            width: '96px',
-            height: '96px',
-            borderRadius: '18px',
-            overflow: 'hidden',
-            zIndex: 50,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-          }}
-        >
+        <div className="global-pip">
           <WebcamEmotion isActive={true} onEmotionDetected={sendEmotion} />
         </div>
       )}
@@ -168,14 +155,11 @@ function App() {
       {isCallActive && (
         <CallOverlay
           callState={callState}
-          emotionState={emotionState}
           isConnected={isConnected}
           lastUserText={lastUserMessage?.content}
           lastAssistantText={lastAssistantMessage?.content}
           onEndCall={toggleCall}
-        >
-          <WebcamEmotion isActive={true} onEmotionDetected={sendEmotion} />
-        </CallOverlay>
+        />
       )}
 
     </div>

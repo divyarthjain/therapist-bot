@@ -23,6 +23,10 @@ export default defineConfig({
           src: 'node_modules/onnxruntime-web/dist/*.wasm',
           dest: 'vad',
         },
+        {
+          src: 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.mjs',
+          dest: 'vad',
+        },
       ],
     }),
   ],

@@ -3,6 +3,21 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import './AuthView.css'
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message
+  }
+  return fallback
+}
+
 export function AuthView() {
   const { isDummyConfig, dummyLogin } = useAuth()
   const [email, setEmail] = useState('')
@@ -31,8 +46,8 @@ export function AuthView() {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Authentication failed')
+    } catch (err: unknown) {
+      setErrorMsg(getErrorMessage(err, 'Authentication failed'))
     } finally {
       setLoading(false)
     }
@@ -48,8 +63,8 @@ export function AuthView() {
     try {
       const { error } = await supabase.auth.signInWithOAuth({ provider: 'github' })
       if (error) throw error
-    } catch (err: any) {
-      setErrorMsg(err.message || 'GitHub Auth failed')
+    } catch (err: unknown) {
+      setErrorMsg(getErrorMessage(err, 'GitHub Auth failed'))
     }
   }
 

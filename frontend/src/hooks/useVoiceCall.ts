@@ -8,6 +8,7 @@ interface UseVoiceCallOptions {
 
 export function useVoiceCall(options: UseVoiceCallOptions) {
   const [callState, setCallState] = useState<CallState>('idle')
+  const [callError, setCallError] = useState<string | null>(null)
 
   const vadRef = useRef<MicVAD | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -74,23 +75,38 @@ export function useVoiceCall(options: UseVoiceCallOptions) {
 
   const toggleCall = useCallback(async () => {
     if (callState === 'idle') {
-      const vad = await MicVAD.new({
-        positiveSpeechThreshold: 0.8,
-        negativeSpeechThreshold: 0.3,
-        redemptionMs: 800,
-        onSpeechStart: () => {
-          stopPlayback()
-          setCallState('listening')
-        },
-        onSpeechEnd: (audio: Float32Array) => {
-          setCallState('processing')
-          const base64 = float32ToWavBase64(audio)
-          onSpeechEndRef.current(base64)
-        },
-      })
-      vadRef.current = vad
-      await vad.start()
-      setCallState('listening')
+      setCallError(null)
+
+      try {
+        const vad = await MicVAD.new({
+          baseAssetPath: '/vad/',
+          onnxWASMBasePath: '/vad/',
+          model: 'v5',
+          positiveSpeechThreshold: 0.8,
+          negativeSpeechThreshold: 0.3,
+          redemptionMs: 800,
+          onSpeechStart: () => {
+            stopPlayback()
+            setCallState('listening')
+          },
+          onSpeechEnd: (audio: Float32Array) => {
+            setCallState('processing')
+            const base64 = float32ToWavBase64(audio)
+            onSpeechEndRef.current(base64)
+          },
+        })
+        vadRef.current = vad
+        await vad.start()
+        setCallState('listening')
+      } catch (error) {
+        console.error('Failed to start microphone call', error)
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Microphone could not be started. Check browser mic permission and reload once.'
+        setCallError(message)
+        setCallState('idle')
+      }
       return
     }
 
@@ -104,6 +120,7 @@ export function useVoiceCall(options: UseVoiceCallOptions) {
       audioContextRef.current = null
     }
     setCallState('idle')
+    setCallError(null)
   }, [callState, float32ToWavBase64, stopPlayback])
 
   const playResponseAndResume = useCallback(async (audioBase64: string) => {
@@ -156,6 +173,7 @@ export function useVoiceCall(options: UseVoiceCallOptions) {
 
   return {
     callState,
+    callError,
     isCallActive: callState !== 'idle',
     toggleCall,
     playResponseAndResume,

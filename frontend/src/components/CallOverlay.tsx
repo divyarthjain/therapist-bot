@@ -1,106 +1,81 @@
-import type { ReactNode } from 'react'
-import type { CallState, EmotionState } from '../types'
-import { EMOTION_EMOJI } from '../types'
+import type { CallState } from '../types'
 import './CallOverlay.css'
 
 interface Props {
   callState: CallState
-  emotionState: EmotionState | null
   isConnected: boolean
   lastUserText?: string
   lastAssistantText?: string
   onEndCall: () => void
-  children?: ReactNode
 }
 
-const CALL_LABELS: Record<CallState, string> = {
-  idle: 'Idle',
-  listening: 'Listening',
-  processing: 'Thinking',
-  speaking: 'Speaking',
+const STATE_LABELS: Record<CallState, string> = {
+  idle: 'Ready',
+  listening: 'Listening…',
+  processing: 'Thinking…',
+  speaking: 'Speaking…',
 }
 
 export function CallOverlay({
   callState,
-  emotionState,
   isConnected,
   lastUserText,
   lastAssistantText,
   onEndCall,
-  children,
 }: Props) {
-  const dominantEmotion = emotionState?.dominant ?? 'neutral'
-  const emotionLabel = `${EMOTION_EMOJI[dominantEmotion] ?? '😐'} ${dominantEmotion}`
-
   return (
-    <div className="call-overlay">
-      <div className="call-overlay__backdrop" />
-      <div className="call-overlay__shell">
-        <div className="call-overlay__header">
-          <div>
-            <p className="call-overlay__eyebrow">Live therapy session</p>
-            <h2 className="call-overlay__title">Dr. Serenity</h2>
-          </div>
-          <div className={`call-overlay__status ${isConnected ? 'online' : 'offline'}`}>
-            <span className="call-overlay__status-dot" />
-            <span>{isConnected ? 'Connected' : 'Reconnecting'}</span>
-          </div>
+    <div className="voice-overlay">
+      <div className="voice-overlay__backdrop" />
+
+      <div className="voice-overlay__content">
+        {/* Status bar */}
+        <div className="voice-overlay__status-bar">
+          <div className={`voice-overlay__conn-dot ${isConnected ? 'online' : ''}`} />
+          <span className="voice-overlay__conn-label">
+            {isConnected ? 'Connected' : 'Reconnecting…'}
+          </span>
         </div>
 
-        <div className="call-overlay__media">
-          <div className="call-overlay__video-panel">{children}</div>
-          <div className="call-overlay__insights">
-            <div className="call-overlay__signal">
-              <div className={`call-overlay__orb call-overlay__orb--${callState}`} />
-              <div>
-                <p className="call-overlay__signal-label">{CALL_LABELS[callState]}</p>
-                <p className="call-overlay__signal-subtitle">
-                  Continuous voice turn-taking is active
-                </p>
-              </div>
-            </div>
-
-            <div className="call-overlay__emotion-card">
-              <span className="call-overlay__card-label">Current emotional read</span>
-              <strong>{emotionLabel}</strong>
-              <span className="call-overlay__confidence">
-                {Math.round((emotionState?.confidence ?? 0) * 100)}% confidence
-              </span>
-            </div>
-
-            <div className="call-overlay__emotion-grid">
-              <div className="call-overlay__mini-card">
-                <span>Voice</span>
-                <strong>
-                  {EMOTION_EMOJI[emotionState?.audio.emotion ?? 'neutral'] ?? '😐'}{' '}
-                  {emotionState?.audio.emotion ?? 'neutral'}
-                </strong>
-              </div>
-              <div className="call-overlay__mini-card">
-                <span>Face</span>
-                <strong>
-                  {EMOTION_EMOJI[emotionState?.video.emotion ?? 'neutral'] ?? '😐'}{' '}
-                  {emotionState?.video.emotion ?? 'neutral'}
-                </strong>
-              </div>
-            </div>
-
-            <div className="call-overlay__transcript">
-              <span className="call-overlay__card-label">You said</span>
-              <p>{lastUserText || 'Start speaking whenever you are ready.'}</p>
-            </div>
-
-            <div className="call-overlay__transcript">
-              <span className="call-overlay__card-label">Assistant</span>
-              <p>{lastAssistantText || 'I am here with you.'}</p>
-            </div>
+        {/* Center orb area */}
+        <div className="voice-overlay__center">
+          <div className={`voice-orb voice-orb--${callState}`}>
+            <div className="voice-orb__ring voice-orb__ring--1" />
+            <div className="voice-orb__ring voice-orb__ring--2" />
+            <div className="voice-orb__ring voice-orb__ring--3" />
+            <div className="voice-orb__core" />
           </div>
+
+          <p className="voice-overlay__state-label">{STATE_LABELS[callState]}</p>
         </div>
 
-        <div className="call-overlay__footer">
-          <button className="call-overlay__end-call" onClick={onEndCall}>
-            End Call
+        {/* Transcript area */}
+        <div className="voice-overlay__transcripts">
+          {lastUserText && (
+            <div className="voice-overlay__transcript voice-overlay__transcript--user">
+              <span className="voice-overlay__who">You</span>
+              <p>{lastUserText}</p>
+            </div>
+          )}
+          {lastAssistantText && (
+            <div className="voice-overlay__transcript voice-overlay__transcript--ai">
+              <span className="voice-overlay__who">Serenity</span>
+              <p>{lastAssistantText}</p>
+            </div>
+          )}
+          {!lastUserText && !lastAssistantText && (
+            <p className="voice-overlay__hint">Start speaking — I'm listening.</p>
+          )}
+        </div>
+
+        {/* End call button */}
+        <div className="voice-overlay__footer">
+          <button className="voice-overlay__end-btn" onClick={onEndCall}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
           </button>
+          <span className="voice-overlay__end-label">End</span>
         </div>
       </div>
     </div>
